@@ -15,6 +15,8 @@ private:
     WasmStack stack;
     WasmParser parser;
     bool inFunction = false;
+    std::string functionName = "";
+    int functionIndex = -1;
     std::unordered_map<std::string, int32_t> globals;
 
     std::unordered_map<int, FuncType> funcTypes; // type index → signature

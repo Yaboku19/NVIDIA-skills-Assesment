@@ -9,11 +9,11 @@ void WasmParser::parseModule(WasmStack& stack, std::unordered_map<std::string, i
     stack.clear();
     globals.clear();
 
-    std::cout << "\033[1;32m[parser]\033[0m New module initialized. Stack and globals cleared.\n";
+    std::cout << "\033[1;32m[parser:parseModule]\033[0m New module initialized. Stack and globals cleared.\n";
 }
 
 void WasmParser::parseGlobal(const std::string& line, std::unordered_map<std::string, int32_t>& globals) {
-    std::cout << "\033[1;32m[parser]\033[0m Global definition found: " << line << "\n";
+    std::cout << "\033[1;32m[parser:parseGlobal]\033[0m Global definition found: " << line << "\n";
 
     std::istringstream iss(line);
     std::string temp, name, token;
@@ -30,11 +30,11 @@ void WasmParser::parseGlobal(const std::string& line, std::unordered_map<std::st
     }
 
     globals[name] = value;
-    std::cout << "\033[1;32m[parser]\033[0m Global init → " << name << " = " << value << "\n";
+    std::cout << "\033[1;32m[parser:parseGlobal]\033[0m Global init → " << name << " = " << value << "\n";
 }
 
 void WasmParser::print_globals(const std::unordered_map<std::string, int32_t>& globals) const {
-    std::cout << "\033[1;32m[parser]\033[0m Global variables state:\n";
+    std::cout << "\033[1;32m[parser:print_globals]\033[0m Global variables state:\n";
     if (globals.empty()) {
         std::cout << "  (empty)\n";
         return;
@@ -46,7 +46,7 @@ void WasmParser::print_globals(const std::unordered_map<std::string, int32_t>& g
 }
 
 void WasmParser::parseType(const std::string& line, std::unordered_map<int, FuncType>& funcTypes) {
-    std::cout << "\033[1;32m[parser]\033[0m Type definition found: " << line << "\n";
+    std::cout << "\033[1;32m[parser:parseType]\033[0m Type definition found: " << line << "\n";
 
     std::istringstream iss(line);
     std::string temp, typeIndexStr, token;
@@ -96,19 +96,20 @@ void WasmParser::parseType(const std::string& line, std::unordered_map<int, Func
         funcType.resultType = "void"; 
     }
     funcTypes[typeIndex] = funcType;
-    std::cout << "\033[1;32m[parser]\033[0m Type parsed → Index: " << typeIndex << ", Params: [";
+    std::cout << "\033[1;32m[parser:parseType]\033[0m Type parsed → Index: " << typeIndex << ", Params: [";
     for (const auto& p : funcType.params) {
         std::cout << p << " ";
     }
     std::cout << "], Results: " << funcType.resultType << "\n";
 }
 
-void WasmParser::parseFunction(
+FuncDef WasmParser::parseFunction(
     const std::string& line,
     std::unordered_map<int, FuncDef>& functionsByID,
     std::unordered_map<std::string, FuncDef>& functionByName,
     const std::unordered_map<int, FuncType>& funcTypes)
 {
+    std::cout << "\033[1;32m[parser:parseFunction]\033[0m Function definition found: " << line << "\n";
     FuncDef func;
     std::string token;
     std::istringstream iss(line);
@@ -170,17 +171,107 @@ void WasmParser::parseFunction(
     if (!func.name.empty())
         functionByName[func.name] = func;
 
-    std::cout << "\033[1;32m[parser]\033[0m Parsed function "
+    std::cout << "\033[1;32m[parser:parseFunction]\033[0m Parsed function "
               << (func.name.empty() ? "[anon]" : func.name)
               << " (index " << func.index << ") "
               << "params=" << func.paramNames.size()
               << " result=" << func.result.type << "\n";
 
-    std::cout << "\033[1;32m[parser]\033[0m Params: ";
+    std::cout << "\033[1;32m[parser:parseFunction]\033[0m Params: ";
     for (const auto& p : func.paramNames)
         std::cout << (p.name.empty() ? "_" : p.name) << ":" << p.type << " ";
     std::cout << "| result: " << (func.result.name.empty() ? "_" : func.result.name)
               << ":" << func.result.type << "\n";
+    return func;
+}
+
+void WasmParser::print_functions(
+    const std::unordered_map<std::string, FuncDef>& functionByName,
+    const std::unordered_map<int, FuncDef>& functionsByID) const
+{
+    std::cout << "\033[1;32m[parser:print_functions]\033[0m Functions by Name:\n";
+    if (functionByName.empty()) {
+        std::cout << "  (empty)\n";
+    } else {
+        for (const auto& [name, func] : functionByName) {
+            std::cout << "  " << name
+                      << " (index " << func.index << ")\n"
+                      << "    params=" << func.paramNames.size()
+                      << " result=" << func.result.type << "\n";
+
+            if (!func.paramNames.empty()) {
+                std::cout << "    Params:\n";
+                for (const auto& p : func.paramNames)
+                    std::cout << "      " << (p.name.empty() ? "[anon]" : p.name)
+                              << ": " << p.type << "\n";
+            }
+
+            if (!func.body.empty()) {
+                std::cout << "    Body:\n";
+                for (const auto& line : func.body)
+                    std::cout << "      " << line << "\n";
+            } else {
+                std::cout << "    Body: (empty)\n";
+            }
+
+            std::cout << "\n";
+        }
+    }
+
+    std::cout << "\033[1;32m[parser:print_functions]\033[0m Functions by ID:\n";
+    if (functionsByID.empty()) {
+        std::cout << "  (empty)\n";
+    } else {
+        for (const auto& [id, func] : functionsByID) {
+            std::cout << "  Index " << id
+                      << " " << (func.name.empty() ? "[anon]" : func.name) << "\n"
+                      << "    params=" << func.paramNames.size()
+                      << " result=" << func.result.type << "\n";
+
+            if (!func.paramNames.empty()) {
+                std::cout << "    Params:\n";
+                for (const auto& p : func.paramNames)
+                    std::cout << "      " << (p.name.empty() ? "[anon]" : p.name)
+                              << ": " << p.type << "\n";
+            }
+
+            if (!func.body.empty()) {
+                std::cout << "    Body:\n";
+                for (const auto& line : func.body)
+                    std::cout << "      " << line << "\n";
+            } else {
+                std::cout << "    Body: (empty)\n";
+            }
+
+            std::cout << "\n";
+        }
+    }
 }
 
 
+void WasmParser::parseBody(const std::string& line, FuncDef* func) {
+    if (!func) {
+        std::cout << "\033[1;31m[parser:parseBody]\033[0m Error: Function definition is null.\n";
+        return;
+    }
+
+    std::string cleaned = line;
+    while (!cleaned.empty() && std::isspace(cleaned.back()))
+        cleaned.pop_back();
+
+    if (!cleaned.empty() && cleaned.back() == ')') {
+        cleaned.pop_back();
+        // Se rimane uno spazio in fondo dopo la parentesi, toglilo anche
+        while (!cleaned.empty() && std::isspace(cleaned.back()))
+            cleaned.pop_back();
+    }
+
+    if (!cleaned.empty()) {
+        func->body.push_back(cleaned);
+        std::cout << "\033[1;32m[parser:parseBody]\033[0m Added line to function "
+                  << (func->name.empty() ? "[anon]" : func->name)
+                  << ": " << cleaned << "\n";
+    } else {
+        std::cout << "\033[1;33m[parser:parseBody]\033[0m Skipped empty line after cleaning.\n";
+    }
+}

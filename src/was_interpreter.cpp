@@ -10,7 +10,7 @@
 void WasmInterpreter::loadFile(const std::string& path) {
     std::ifstream file(path);
     if (!file.is_open())
-        throw std::runtime_error("\033[1;31m[interpreter]\033[0m Cannot open file: " + path);
+        throw std::runtime_error("\033[1;31m[interpreter:loadFile]\033[0m Cannot open file: " + path);
 
     sourceCode.assign(
         (std::istreambuf_iterator<char>(file)),
@@ -18,13 +18,13 @@ void WasmInterpreter::loadFile(const std::string& path) {
 }
 
 void WasmInterpreter::run() {
-    std::cout << "\033[1;34m[interpreter]\033[0m Executing simplified WebAssembly:\n";
+    std::cout << "\033[1;34m[interpreter:run]\033[0m Executing simplified WebAssembly:\n";
 
     std::istringstream stream(sourceCode);
     std::string line;
 
     while (std::getline(stream, line)) {
-        std::cout << "\033[1;34m[interpreter]\033[0m Executing line: " << line << "\n";
+        std::cout << "\033[1;34m[interpreter:run]\033[0m Executing line: " << line << "\n";
         executeLine(line);
     }
 
@@ -42,7 +42,7 @@ void WasmInterpreter::executeLine(const std::string& line) {
     trimmed.erase(0, trimmed.find_first_not_of(" \t"));
 
     if (trimmed.empty() || trimmed.rfind(";;", 0) == 0) {
-        std::cout << "\033[1;34m[interpreter]\033[0m skipped\n";
+        std::cout << "\033[1;34m[interpreter:executeLine]\033[0m skipped\n";
         return;
     }
     std::this_thread::sleep_for(std::chrono::milliseconds(1000));
@@ -50,8 +50,17 @@ void WasmInterpreter::executeLine(const std::string& line) {
     std::string token;
     iss >> token;
 
-    std::cout << "\033[1;34m[interpreter]\033[0m Executing: " << token << "\n";
+    std::cout << "\033[1;34m[interpreter:executeLine]\033[0m Executing: " << token << "\n";
     if (inFunction) {
+        std::cout << "\033[1;34m[interpreter:executeLine]\033[0m Current function: "
+                  << (functionName.empty() ? "[anon]" : functionName)
+                  << " (index " << functionIndex << ")\n";
+        if (functionName.empty()) {
+            parser.parseBody(trimmed, &functionsByID[functionIndex]);
+        } else {
+            parser.parseBody(trimmed, &functionByName[functionName]);
+        }
+        
         //std::cout << "\033[1;34m[interpreter]\033[0m ---------function body " << functions.size()-1 << "\n";
         //parser.parseBody(trimmed, functions[functions.size()-1]);
         if (trimmed.size() && trimmed.back() == ')') {
@@ -67,7 +76,10 @@ void WasmInterpreter::executeLine(const std::string& line) {
     } else if (token.find("type") != std::string::npos) {
         parser.parseType(trimmed, funcTypes);
     } else if (token.find("func") != std::string::npos) {
-        parser.parseFunction(trimmed, functionsByID, functionByName, funcTypes);
+        FuncDef fun = parser.parseFunction(trimmed, functionsByID, functionByName, funcTypes);
+        functionName = fun.name;
+        functionIndex = fun.index;
+        parser.print_functions(functionByName, functionsByID);
         inFunction = true;
     }
 }
