@@ -51,10 +51,23 @@ void WasmInterpreter::executeLine(const std::string& line) {
     iss >> token;
 
     std::cout << "\033[1;34m[interpreter]\033[0m Executing: " << token << "\n";
-    if (token.find("module") != std::string::npos) {
-        executor.parseModule(stack, globals);
+    if (inFunction) {
+        //std::cout << "\033[1;34m[interpreter]\033[0m ---------function body " << functions.size()-1 << "\n";
+        //parser.parseBody(trimmed, functions[functions.size()-1]);
+        if (trimmed.size() && trimmed.back() == ')') {
+            inFunction = false;
+            // std::cout << "\033[1;34m[interpreter]\033[0m --------- end function body "
+            //         << functions.size() - 1 << "\n";
+        }
+    } else if (token.find("module") != std::string::npos) {
+        parser.parseModule(stack, globals);
     } else if (token.find("global") != std::string::npos) {
-        executor.parseGlobal(trimmed, globals);
-        executor.print_globals(globals);
+        parser.parseGlobal(trimmed, globals);
+        parser.print_globals(globals);
+    } else if (token.find("type") != std::string::npos) {
+        parser.parseType(trimmed, funcTypes);
+    } else if (token.find("func") != std::string::npos) {
+        parser.parseFunction(trimmed, functionsByID, functionByName, funcTypes);
+        inFunction = true;
     }
 }

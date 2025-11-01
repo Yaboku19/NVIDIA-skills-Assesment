@@ -1,8 +1,10 @@
 #pragma once
 #include <string>
 #include <unordered_map>
+#include <functional>
 #include "wasm_stack.hpp"
-#include "wasm_executor.hpp"
+#include "wasm_parser.hpp"
+#include "struct.h"
 
 class WasmInterpreter {
 public:
@@ -11,13 +13,13 @@ public:
 private:
     std::string sourceCode;
     WasmStack stack;
-    WasmExecutor executor;
+    WasmParser parser;
+    bool inFunction = false;
     std::unordered_map<std::string, int32_t> globals;
 
-    std::unordered_map<int, std::string> funcIndexToName;   // ID → name
-    std::unordered_map<std::string, int> funcNameToIndex;   // Name → ID
-    std::unordered_map<std::string, std::string> exports;   // Export name → function name
-    std::unordered_map<std::string, std::function<void()>> funcImpl; // Name → executable function
+    std::unordered_map<int, FuncType> funcTypes; // type index → signature
+    std::unordered_map<int, FuncDef> functionsByID;
+    std::unordered_map<std::string, FuncDef> functionByName;
 
     void executeLine(const std::string& line);
 };

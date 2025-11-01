@@ -7,6 +7,7 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 # Add source files
 file(GLOB SOURCES src/*.cpp)
 include_directories(include)
+include_directories(utils)
 
 add_executable(wasm_interpreter ${SOURCES})
 
