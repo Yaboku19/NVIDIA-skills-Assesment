@@ -8,7 +8,6 @@ class WasmInterpreter {
 public:
     void loadFile(const std::string& path);
     void run();
-
 private:
     std::string sourceCode;
     WasmStack stack;
