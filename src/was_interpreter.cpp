@@ -45,7 +45,6 @@ void WasmInterpreter::executeLine(const std::string& line) {
         std::cout << "\033[1;34m[interpreter:executeLine]\033[0m skipped\n";
         return;
     }
-    std::this_thread::sleep_for(std::chrono::milliseconds(1000));
     std::istringstream iss(trimmed);
     std::string token;
     iss >> token;
@@ -55,19 +54,30 @@ void WasmInterpreter::executeLine(const std::string& line) {
         std::cout << "\033[1;34m[interpreter:executeLine]\033[0m Current function: "
                   << (functionName.empty() ? "[anon]" : functionName)
                   << " (index " << functionIndex << ")\n";
-        if (functionName.empty()) {
-            parser.parseBody(trimmed, &functionsByID[functionIndex]);
-        } else {
-            parser.parseBody(trimmed, &functionByName[functionName]);
+
+        std::string codePart = trimmed;
+        size_t commentPos = codePart.find(";;");
+        if (commentPos != std::string::npos)
+            codePart = codePart.substr(0, commentPos);
+
+        for (char c : codePart) {
+            if (c == '(') brakes++;
+            else if (c == ')') brakes--;
         }
-        
-        //std::cout << "\033[1;34m[interpreter]\033[0m ---------function body " << functions.size()-1 << "\n";
-        //parser.parseBody(trimmed, functions[functions.size()-1]);
-        if (trimmed.size() && trimmed.back() == ')') {
+
+        std::cout << "\033[1;34m[interpreter:executeLine]\033[0m Braces count = " << brakes << "\n";
+        bool toRemove = false;
+        if (brakes <= 0) {
             inFunction = false;
-            // std::cout << "\033[1;34m[interpreter]\033[0m --------- end function body "
-            //         << functions.size() - 1 << "\n";
+            toRemove = true;
+            brakes = 0;
+            std::cout << "\033[1;34m[interpreter:executeLine]\033[0m -------- end function body --------\n";
         }
+
+        if (functionName.empty())
+            parser.parseBody(trimmed, &functionsByID[functionIndex], toRemove);
+        else
+            parser.parseBody(trimmed, &functionByName[functionName], toRemove);
     } else if (token.find("module") != std::string::npos) {
         parser.parseModule(stack, globals);
     } else if (token.find("global") != std::string::npos) {
@@ -81,5 +91,6 @@ void WasmInterpreter::executeLine(const std::string& line) {
         functionIndex = fun.index;
         parser.print_functions(functionByName, functionsByID);
         inFunction = true;
+        brakes = 1;
     }
 }

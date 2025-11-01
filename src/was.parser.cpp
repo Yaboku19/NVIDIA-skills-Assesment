@@ -248,8 +248,7 @@ void WasmParser::print_functions(
     }
 }
 
-
-void WasmParser::parseBody(const std::string& line, FuncDef* func) {
+void WasmParser::parseBody(const std::string& line, FuncDef* func, bool toRemove) {
     if (!func) {
         std::cout << "\033[1;31m[parser:parseBody]\033[0m Error: Function definition is null.\n";
         return;
@@ -258,12 +257,12 @@ void WasmParser::parseBody(const std::string& line, FuncDef* func) {
     std::string cleaned = line;
     while (!cleaned.empty() && std::isspace(cleaned.back()))
         cleaned.pop_back();
-
-    if (!cleaned.empty() && cleaned.back() == ')') {
-        cleaned.pop_back();
-        // Se rimane uno spazio in fondo dopo la parentesi, toglilo anche
-        while (!cleaned.empty() && std::isspace(cleaned.back()))
+    if (toRemove) {
+        if (!cleaned.empty() && cleaned.back() == ')') {
             cleaned.pop_back();
+            while (!cleaned.empty() && std::isspace(cleaned.back()))
+                cleaned.pop_back();
+        }
     }
 
     if (!cleaned.empty()) {
