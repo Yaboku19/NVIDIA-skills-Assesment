@@ -14,6 +14,10 @@ int main(int argc, char** argv) {
         interpreter.parse();
         interpreter.callFunctionByExportName("_start");
         interpreter.showMemory(0, 128);
+        interpreter.callFunctionByExportName("_test_addition");
+        interpreter.showMemory(0, 128);
+        interpreter.callFunctionByExportName("_test_subtraction");
+        interpreter.showMemory(0, 128);
     } catch (const std::exception& e) {
         std::cerr << "Error: " << e.what() << "\n";
         return 1;
