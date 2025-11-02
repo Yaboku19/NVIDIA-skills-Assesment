@@ -28,9 +28,11 @@ public:
     double   loadF64(uint32_t addr) const;
 
     // ---- MANAGEMENT ----
-    void grow(size_t additionalPages);
+    int32_t  grow(int32_t  additionalPages);
     size_t sizeInPages() const { return data.size() / PAGE_SIZE; }
-
+    int32_t size() const {
+        return static_cast<int32_t>(sizeInPages());
+    }
     void debugPrint(uint32_t start = 0, uint32_t count = 32) const;
 
 private:

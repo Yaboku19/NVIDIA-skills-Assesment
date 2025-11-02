@@ -8,6 +8,7 @@
 
 class WasmExecutor {
 public:
+    WasmStack lastStack;
     void execute(const FuncDef& func,
     std::unordered_map<int, FuncDef>& functionsByID,
     std::unordered_map<std::string, FuncDef>& functionByName,

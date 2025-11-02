@@ -5,6 +5,9 @@
 #include <bit>
 #include "struct.h"
 #include "wasm_memory.hpp"
+#include <algorithm>
+#include <cctype>
+#include <cmath>
 
 static inline int countl_zero32(uint32_t x) { return x == 0 ? 32 : __builtin_clz(x); }
 static inline int countr_zero32(uint32_t x) { return x == 0 ? 32 : __builtin_ctz(x); }
@@ -23,6 +26,9 @@ void WasmExecutor::execute(
     WasmStack stack;
     stack.clear();
     std::unordered_map<std::string, WasmValue> locals;
+    for (const auto& [pname, pval] : func.params) {
+        locals[pname] = pval;
+    }
     std::cout << "\033[1;36m[executor:execute]\033[0m Executing function '" << func.name << "' (index " << func.index << ").\n";
     std::vector<bool> skipStack;
     std::vector<BlockInfo> blockStack;
@@ -163,6 +169,115 @@ void WasmExecutor::execute(
             }
             std::cout << "\n";
             stack.push(result);
+            continue;
+        } else if (op == "return") {
+            std::cout << "\033[1;36m[executor:return]\033[0m returning from function "
+                    << (func.name.empty() ? "[anon]" : func.name) << "\n";
+            return;
+        }else if (op == "call") {
+            std::string target;
+            iss >> target;
+
+            bool isNumeric = !target.empty() && std::all_of(target.begin(), target.end(), ::isdigit);
+            FuncDef* callee = nullptr;
+
+            if (isNumeric) {
+                int funcIndex = std::stoi(target);
+                auto it = functionsByID.find(funcIndex);
+                if (it == functionsByID.end()) {
+                    std::cerr << "\033[1;31m[executor:call]\033[0m Error: function index "
+                            << funcIndex << " not found!\n";
+                    continue;
+                }
+                callee = &it->second;
+                std::cout << "\033[1;36m[executor:call]\033[0m Calling function index "
+                        << funcIndex << " (" << (callee->name.empty() ? "[anon]" : callee->name) << ")\n";
+            } else {
+                auto it = functionByName.find(target);
+                if (it == functionByName.end()) {
+                    std::cerr << "\033[1;31m[executor:call]\033[0m Error: function name '"
+                            << target << "' not found!\n";
+                    continue;
+                }
+                callee = &it->second;
+                std::cout << "\033[1;36m[executor:call]\033[0m Calling function name '"
+                        << target << "' (index " << callee->index << ")\n";
+            }
+
+            size_t paramCount = callee->params.size();
+            std::vector<WasmValue> args;
+            args.reserve(paramCount);
+
+            for (size_t i = 0; i < paramCount; ++i) {
+                if (stack.empty()) {
+                    std::cerr << "\033[1;31m[executor:call]\033[0m Error: stack underflow while reading args!\n";
+                    break;
+                }
+                args.push_back(stack.pop());
+            }
+            std::reverse(args.begin(), args.end());
+
+            size_t i = 0;
+            for (auto& [paramName, paramVal] : callee->params) {
+                if (i < args.size()) {
+                    paramVal = args[i];
+                    std::cout << "\033[1;36m[executor:call]\033[0m arg "
+                            << (paramName.empty() ? "_" : paramName) << " = ";
+                    switch (args[i].type) {
+                        case ValueType::I32: std::cout << args[i].i32; break;
+                        case ValueType::I64: std::cout << args[i].i64; break;
+                        case ValueType::F32: std::cout << args[i].f32; break;
+                        case ValueType::F64: std::cout << args[i].f64; break;
+                    }
+                    std::cout << "\n";
+                }
+                ++i;
+            }
+            
+            std::cout << "\033[1;34m[debug:parseFunction]\033[0m Params detected: ";
+            for (auto& [pname, _] : callee->params) std::cout << pname << " ";
+            std::cout << "\n";
+
+
+            WasmExecutor nestedExec;
+            nestedExec.execute(*callee, functionsByID, functionByName, memory, globals);
+
+            if (!nestedExec.lastStack.empty()) {
+                WasmValue retVal = nestedExec.lastStack.top();
+                stack.push(retVal);
+                std::cout << "\033[1;36m[executor:call]\033[0m returned value pushed to caller stack: ";
+                switch (retVal.type) {
+                    case ValueType::I32: std::cout << retVal.i32; break;
+                    case ValueType::I64: std::cout << retVal.i64; break;
+                    case ValueType::F32: std::cout << retVal.f32; break;
+                    case ValueType::F64: std::cout << retVal.f64; break;
+                    default: std::cout << "(none)"; break;
+                }
+                std::cout << "\n";
+            } else {
+                std::cerr << "\033[1;31m[executor:call]\033[0m Warning: callee returned no value!\n";
+            }
+
+
+            continue;
+        } else if (op == "memory.size") {
+            int32_t pages = memory.size();
+            stack.push(WasmValue(pages));
+            std::cout << "\033[1;36m[executor:memory.size]\033[0m → pages=" << pages << "\n";
+            continue;
+        }
+        else if (op == "memory.grow") {
+            if (stack.empty()) {
+                std::cerr << "\033[1;31m[executor:memory.grow]\033[0m Error: stack underflow\n";
+                continue;
+            }
+            WasmValue pages = stack.pop();
+            if (pages.type != ValueType::I32) {
+                std::cerr << "\033[1;31m[executor:memory.grow]\033[0m Error: expected i32 argument\n";
+                continue;
+            }
+            int32_t oldPages = memory.grow(pages.i32);
+            stack.push(WasmValue(oldPages));
             continue;
         } else if (op.find("store") != std::string::npos) {
             if (op == "i32.store8") doStore([&](int32_t a, WasmValue v){ memory.store8(a, static_cast<uint8_t>(v.i32)); }, "executor:" + op);
@@ -367,6 +482,9 @@ void WasmExecutor::execute(
                 std::cerr << "\033[1;31m[executor:drop]\033[0m Error: stack underflow!\n";
             }
             continue;
+        } else if (op == "nop") {
+            std::cout << "\033[1;36m[executor:nop]\033[0m (no operation)\n";
+            continue;
         } else if (op == "loop") {
             std::string lbl;
             if (iss >> lbl && !lbl.empty() && lbl[0] == '$') {
@@ -389,19 +507,16 @@ void WasmExecutor::execute(
             WasmValue indexVal = stack.pop();
             uint32_t index = static_cast<uint32_t>(indexVal.i32);
             std::cout << "\033[1;36m[executor:br_table]\033[0m index=" << index << " → ";
-
             std::string targetLabel = (index < labels.size() - 1) 
                 ? labels[index] 
                 : labels.back();
             std::cout << "target=" << targetLabel << "\n";
-
             int depth = resolveDepth(targetLabel);
             if (depth < 0 || depth >= static_cast<int32_t>(blockStack.size())) {
                 std::cerr << "\033[1;31m[executor:br_table]\033[0m invalid depth for label "
                           << targetLabel << "!\n";
                 continue;
             }
-
             BlockInfo target = blockStack[blockStack.size() - 1 - depth];
             std::cout << "\033[1;36m[executor:br_table]\033[0m → target "
                       << (target.isLoop ? "loop" : "block")
@@ -413,7 +528,6 @@ void WasmExecutor::execute(
             } else {
                 int open = 0;
                 int toClose = depth + 1;
-
                 for (++pc; pc < func.body.size(); ++pc) {
                     std::string t = firstTok(func.body[pc]);
                     if (t == "block" || t == "loop") {
@@ -435,6 +549,179 @@ void WasmExecutor::execute(
                 continue;
             }
             continue;
+        } else if (op == "i32.reinterpret_f32") {
+            if (stack.empty()) {
+                std::cerr << "\033[1;31m[executor:i32.reinterpret_f32]\033[0m Error: stack underflow\n";
+                continue;
+            }
+            WasmValue val = stack.pop();
+            if (val.type != ValueType::F32) {
+                std::cerr << "\033[1;31m[executor:i32.reinterpret_f32]\033[0m Error: expected f32 on stack, got different type\n";
+                continue;
+            }
+            int32_t bits;
+            std::memcpy(&bits, &val.f32, sizeof(bits));
+            WasmValue reinterpreted(bits);
+            stack.push(reinterpreted);
+            union {
+                int32_t i;
+                float f;
+            } u;
+            u.i = bits;
+            std::cout << "\033[1;36m[executor:i32.reinterpret_f32]\033[0m "
+                    << "f32=" << val.f32
+                    << " → bit pattern 0x" << std::hex << bits
+                    << std::dec << " (interpreted f32=" << u.f << ")\n";
+        } else if (op == "f32.convert_i32_s") {
+            if (stack.empty()) {
+                std::cerr << "\033[1;31m[executor:f32.convert_i32_s]\033[0m Error: stack underflow\n";
+                continue;
+            }
+            WasmValue val = stack.pop();
+            if (val.type != ValueType::I32) {
+                std::cerr << "\033[1;31m[executor:f32.convert_i32_s]\033[0m Error: expected i32 on stack, got different type\n";
+                continue;
+            }
+            float f = static_cast<float>(val.i32);
+            WasmValue result(f);
+            stack.push(result);
+            std::cout << "\033[1;36m[executor:f32.convert_i32_s]\033[0m "
+                    << "i32=" << val.i32 << " → f32=" << f << "\n";
+        } else if (op == "f32.convert_i32_u") {
+            if (stack.empty()) {
+                std::cerr << "\033[1;31m[executor:f32.convert_i32_u]\033[0m Error: stack underflow\n";
+                continue;
+            }
+            WasmValue val = stack.pop();
+            if (val.type != ValueType::I32) {
+                std::cerr << "\033[1;31m[executor:f32.convert_i32_u]\033[0m Error: expected i32\n";
+                continue;
+            }
+            float f = static_cast<float>(static_cast<uint32_t>(val.i32));
+            stack.push(WasmValue(f));
+            std::cout << "\033[1;36m[executor:f32.convert_i32_u]\033[0m i32=" << val.i32 << " → f32=" << f << "\n";
+        } else if (op == "i32.trunc_f32_s") {
+            if (stack.empty()) {
+                std::cerr << "\033[1;31m[executor:i32.trunc_f32_s]\033[0m Error: stack underflow\n";
+                continue;
+            }
+            WasmValue val = stack.pop();
+            if (val.type != ValueType::F32) {
+                std::cerr << "\033[1;31m[executor:i32.trunc_f32_s]\033[0m Error: expected f32\n";
+                continue;
+            }
+            int32_t i = static_cast<int32_t>(std::trunc(val.f32));
+            stack.push(WasmValue(i));
+            std::cout << "\033[1;36m[executor:i32.trunc_f32_s]\033[0m f32=" << val.f32 << " → i32=" << i << "\n";
+        } else if (op == "i32.trunc_f32_u") {
+            if (stack.empty()) {
+                std::cerr << "\033[1;31m[executor:i32.trunc_f32_u]\033[0m Error: stack underflow\n";
+                continue;
+            }
+            WasmValue val = stack.pop();
+            if (val.type != ValueType::F32) {
+                std::cerr << "\033[1;31m[executor:i32.trunc_f32_u]\033[0m Error: expected f32\n";
+                continue;
+            }
+            uint32_t i = static_cast<uint32_t>(std::trunc(val.f32));
+            stack.push(WasmValue(static_cast<int32_t>(i)));
+            std::cout << "\033[1;36m[executor:i32.trunc_f32_u]\033[0m f32=" << val.f32 << " → u32=" << i << "\n";
+        } else if (op == "f64.convert_i32_s") {
+            if (stack.empty()) {
+                std::cerr << "\033[1;31m[executor:f64.convert_i32_s]\033[0m Error: stack underflow\n";
+                continue;
+            }
+            WasmValue val = stack.pop();
+            if (val.type != ValueType::I32) {
+                std::cerr << "\033[1;31m[executor:f64.convert_i32_s]\033[0m Error: expected i32\n";
+                continue;
+            }
+            double d = static_cast<double>(val.i32);
+            stack.push(WasmValue(d));
+            std::cout << "\033[1;36m[executor:f64.convert_i32_s]\033[0m i32=" << val.i32 << " → f64=" << d << "\n";
+        } else if (op == "i32.trunc_f64_s") {
+            if (stack.empty()) {
+                std::cerr << "\033[1;31m[executor:i32.trunc_f64_s]\033[0m Error: stack underflow\n";
+                continue;
+            }
+            WasmValue val = stack.pop();
+            if (val.type != ValueType::F64) {
+                std::cerr << "\033[1;31m[executor:i32.trunc_f64_s]\033[0m Error: expected f64\n";
+                continue;
+            }
+            int32_t i = static_cast<int32_t>(std::trunc(val.f64));
+            stack.push(WasmValue(i));
+            std::cout << "\033[1;36m[executor:i32.trunc_f64_s]\033[0m f64=" << val.f64 << " → i32=" << i << "\n";
+        } else if (op == "f64.promote_f32") {
+            if (stack.empty()) {
+                std::cerr << "\033[1;31m[executor:f64.promote_f32]\033[0m Error: stack underflow\n";
+                continue;
+            }
+            WasmValue val = stack.pop();
+            if (val.type != ValueType::F32) {
+                std::cerr << "\033[1;31m[executor:f64.promote_f32]\033[0m Error: expected f32\n";
+                continue;
+            }
+            double d = static_cast<double>(val.f32);
+            stack.push(WasmValue(d));
+            std::cout << "\033[1;36m[executor:f64.promote_f32]\033[0m f32=" << val.f32 << " → f64=" << d << "\n";
+        } else if (op == "f32.demote_f64") {
+            if (stack.empty()) {
+                std::cerr << "\033[1;31m[executor:f32.demote_f64]\033[0m Error: stack underflow\n";
+                continue;
+            }
+            WasmValue val = stack.pop();
+            if (val.type != ValueType::F64) {
+                std::cerr << "\033[1;31m[executor:f32.demote_f64]\033[0m Error: expected f64\n";
+                continue;
+            }
+            float f = static_cast<float>(val.f64);
+            stack.push(WasmValue(f));
+            std::cout << "\033[1;36m[executor:f32.demote_f64]\033[0m f64=" << val.f64 << " → f32=" << f << "\n";
+        } else if (op == "f32.reinterpret_i32") {
+            if (stack.empty()) {
+                std::cerr << "\033[1;31m[executor:f32.reinterpret_i32]\033[0m Error: stack underflow\n";
+                continue;
+            }
+            WasmValue val = stack.pop();
+            if (val.type != ValueType::I32) {
+                std::cerr << "\033[1;31m[executor:f32.reinterpret_i32]\033[0m Error: expected i32\n";
+                continue;
+            }
+            float f;
+            std::memcpy(&f, &val.i32, sizeof(f));
+            stack.push(WasmValue(f));
+            std::cout << "\033[1;36m[executor:f32.reinterpret_i32]\033[0m i32=0x" << std::hex << val.i32
+                    << std::dec << " → f32=" << f << "\n";
+        } else if (op == "i64.reinterpret_f64") {
+            if (stack.empty()) {
+                std::cerr << "\033[1;31m[executor:i64.reinterpret_f64]\033[0m Error: stack underflow\n";
+                continue;
+            }
+            WasmValue val = stack.pop();
+            if (val.type != ValueType::F64) {
+                std::cerr << "\033[1;31m[executor:i64.reinterpret_f64]\033[0m Error: expected f64\n";
+                continue;
+            }
+            int64_t bits;
+            std::memcpy(&bits, &val.f64, sizeof(bits));
+            stack.push(WasmValue(bits));
+            std::cout << "\033[1;36m[executor:i64.reinterpret_f64]\033[0m f64=" << val.f64
+                    << " → bits=0x" << std::hex << bits << std::dec << "\n";
+        } else if (op == "i32.wrap_i64") {
+            if (stack.empty()) {
+                std::cerr << "\033[1;31m[executor:i32.wrap_i64]\033[0m Error: stack underflow\n";
+                continue;
+            }
+            WasmValue val = stack.pop();
+            if (val.type != ValueType::I64) {
+                std::cerr << "\033[1;31m[executor:i32.wrap_i64]\033[0m Error: expected i64\n";
+                continue;
+            }
+            int32_t truncated = static_cast<int32_t>(val.i64);
+            stack.push(WasmValue(truncated));
+            std::cout << "\033[1;36m[executor:i32.wrap_i64]\033[0m i64=" << val.i64
+                    << " → i32=" << truncated << "\n";
         } else if (op.rfind("i32.", 0) == 0) {
             if (op == "i32.add") binaryOp([](int32_t a, int32_t b){ return a + b; }, op, ValueType::I32);
             else if (op == "i32.sub") binaryOp([](int32_t a, int32_t b){ return a - b; }, op, ValueType::I32);
@@ -442,6 +729,10 @@ void WasmExecutor::execute(
             else if (op == "i32.and") binaryOp([](int32_t a, int32_t b){ return a & b; }, op, ValueType::I32);
             else if (op == "i32.or") binaryOp([](int32_t a, int32_t b){ return a | b; }, op, ValueType::I32);
             else if (op == "i32.xor") binaryOp([](int32_t a, int32_t b){ return a ^ b; }, op, ValueType::I32);
+            else if (op == "i32.min") binaryOp([](int32_t a, int32_t b){ return a < b ? a : b; }, op, ValueType::I32);
+            else if (op == "i32.max") binaryOp([](int32_t a, int32_t b){ return a > b ? a : b; }, op, ValueType::I32);
+            else if (op == "i32.abs") unaryOp([](int32_t a){ return a < 0 ? -a : a; }, op, ValueType::I32);
+            else if (op == "i32.neg") unaryOp([](int32_t a){ return -a; }, op, ValueType::I32);
             else if (op == "i32.shl") binaryOp([](int32_t a, int32_t b){ return a << (b & 31); }, op, ValueType::I32);
             else if (op == "i32.shr_s") binaryOp([](int32_t a, int32_t b){ return a >> (b & 31); }, op, ValueType::I32);
             else if (op == "i32.shr_u") binaryOp([](int32_t a, int32_t b){ return static_cast<int32_t>(static_cast<uint32_t>(a) >> (b & 31)); }, op, ValueType::I32);
@@ -473,6 +764,10 @@ void WasmExecutor::execute(
             else if (op == "i64.and") binaryOp([](int64_t a, int64_t b){ return a & b; }, op, ValueType::I64);
             else if (op == "i64.or") binaryOp([](int64_t a, int64_t b){ return a | b; }, op, ValueType::I64);
             else if (op == "i64.xor") binaryOp([](int64_t a, int64_t b){ return a ^ b; }, op, ValueType::I64);
+            else if (op == "i64.min") binaryOp([](int64_t a, int64_t b){ return a < b ? a : b; }, op, ValueType::I64);
+            else if (op == "i64.max") binaryOp([](int64_t a, int64_t b){ return a > b ? a : b; }, op, ValueType::I64);
+            else if (op == "i64.abs") unaryOp([](int64_t a){ return a < 0 ? -a : a; }, op, ValueType::I64);
+            else if (op == "i64.neg") unaryOp([](int64_t a){ return -a; }, op, ValueType::I64);
             else if (op == "i64.shl") binaryOp([](int64_t a, int64_t b){ return a << (b & 63); }, op, ValueType::I64);
             else if (op == "i64.shr_s") binaryOp([](int64_t a, int64_t b){ return a >> (b & 63); }, op, ValueType::I64);
             else if (op == "i64.shr_u") binaryOp([](int64_t a, int64_t b){ return static_cast<int64_t>(static_cast<uint64_t>(a) >> (b & 63)); }, op, ValueType::I64);
@@ -502,6 +797,15 @@ void WasmExecutor::execute(
             else if (op == "f32.sub") binaryOp([](float a, float b){ return a - b; }, op, ValueType::F32);
             else if (op == "f32.mul") binaryOp([](float a, float b){ return a * b; }, op, ValueType::F32);
             else if (op == "f32.div") binaryOp([](float a, float b){ return a / b; }, op, ValueType::F32);
+            else if (op == "f32.min") binaryOp([](float a, float b){ return a < b ? a : b; }, op, ValueType::F32);
+            else if (op == "f32.max") binaryOp([](float a, float b){ return a > b ? a : b; }, op, ValueType::F32);
+            else if (op == "f32.abs") unaryOp([](float a){ return a < 0 ? -a : a; }, op, ValueType::F32);
+            else if (op == "f32.neg") unaryOp([](float a){ return -a; }, op, ValueType::F32);
+            else if (op == "f32.sqrt") unaryOp([](float a){ return std::sqrt(a); }, op, ValueType::F32);
+            else if (op == "f32.ceil") unaryOp([](float a){ return std::ceil(a); }, op, ValueType::F32);
+            else if (op == "f32.floor") unaryOp([](float a){ return std::floor(a); }, op, ValueType::F32);
+            else if (op == "f32.trunc") unaryOp([](float a){ return std::trunc(a); }, op, ValueType::F32);
+            else if (op == "f32.nearest") unaryOp([](float a){ return std::nearbyint(a); }, op, ValueType::F32);
             else if (op == "f32.eq") cmpOp([](float a, float b){return a==b;}, op, ValueType::F32);
             else if (op == "f32.ne") cmpOp([](float a, float b){return a!=b;}, op, ValueType::F32);
             else if (op == "f32.lt") cmpOp([](float a, float b){return a<b;}, op, ValueType::F32);
@@ -514,6 +818,15 @@ void WasmExecutor::execute(
             else if (op == "f64.sub") binaryOp([](double a, double b){ return a - b; }, op, ValueType::F64);
             else if (op == "f64.mul") binaryOp([](double a, double b){ return a * b; }, op, ValueType::F64);
             else if (op == "f64.div") binaryOp([](double a, double b){ return a / b; }, op, ValueType::F64);
+            else if (op == "f64.min") binaryOp([](double a, double b){ return a < b ? a : b; }, op, ValueType::F64);
+            else if (op == "f64.max") binaryOp([](double a, double b){ return a > b ? a : b; }, op, ValueType::F64);
+            else if (op == "f64.abs") unaryOp([](double a){ return a < 0 ? -a : a; }, op, ValueType::F64);
+            else if (op == "f64.neg") unaryOp([](double a){ return -a; }, op, ValueType::F64);
+            else if (op == "f64.sqrt") unaryOp([](double a){ return std::sqrt(a); }, op, ValueType::F64);
+            else if (op == "f64.ceil") unaryOp([](double a){ return std::ceil(a); }, op, ValueType::F64);
+            else if (op == "f64.floor") unaryOp([](double a){ return std::floor(a); }, op, ValueType::F64);
+            else if (op == "f64.trunc") unaryOp([](double a){ return std::trunc(a); }, op, ValueType::F64);
+            else if (op == "f64.nearest") unaryOp([](double a){ return std::nearbyint(a); }, op, ValueType::F64);
             else if (op == "f64.eq") cmpOp([](double a, double b){return a==b;}, op, ValueType::F64);
             else if (op == "f64.ne") cmpOp([](double a, double b){return a!=b;}, op, ValueType::F64);
             else if (op == "f64.lt") cmpOp([](double a, double b){return a<b;}, op, ValueType::F64);
@@ -527,4 +840,6 @@ void WasmExecutor::execute(
     }
 
     std::cout << "\033[1;36m[executor:execute]\033[0m Function completed.\n";
+    this->lastStack = stack;
+
 }

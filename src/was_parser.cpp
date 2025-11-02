@@ -179,11 +179,15 @@ FuncDef WasmParser::parseFunction(
     FuncDef func;
     std::string token;
     std::istringstream iss(line);
+    int anonCounter = 1; 
+
+    // ✅ PRE-SCAN: se la riga contiene (param ...), NON importiamo i param dal (type N)
+    const bool hasExplicitParams = (line.find("(param") != std::string::npos);
 
     while (iss >> token) {
         if (token == "(func") continue;
 
-        if (token.rfind("(;", 0) == 0 && token.find(";") != std::string::npos) {
+        if (token.rfind("(;", 0) == 0 && token.find(';') != std::string::npos) {
             try {
                 size_t start = token.find(';') + 1;
                 size_t end = token.find(';', start);
@@ -193,7 +197,7 @@ FuncDef WasmParser::parseFunction(
             }
         }
 
-        else if (token[0] == '$') {
+        else if (!token.empty() && token[0] == '$') {
             func.name = token;
         }
 
@@ -205,11 +209,29 @@ FuncDef WasmParser::parseFunction(
 
                 auto it = funcTypes.find(t);
                 if (it != funcTypes.end()) {
+                    const FuncType& ftype = it->second;
 
-                    func.paramNames.clear();
-                    for (const auto& paramType : it->second.params)
-                        func.paramNames.push_back({ "", paramType });
-                    func.result = { "", it->second.resultType };
+                    // ⛔️ PRIMA importavi sempre: ora lo fai SOLO se non ci sono (param ...)
+                    if (!hasExplicitParams && func.params.empty()) {
+                        for (const auto& ptype : ftype.params) {
+                            WasmValue val;
+                            if (ptype == "i32") val = WasmValue(int32_t(0));
+                            else if (ptype == "i64") val = WasmValue(int64_t(0));
+                            else if (ptype == "f32") val = WasmValue(float(0));
+                            else if (ptype == "f64") val = WasmValue(double(0));
+
+                            std::string anonName = "param_" + std::to_string(anonCounter++);
+                            func.params[anonName] = val;
+                        }
+                    }
+
+                    // Il result del type lo importiamo comunque se presente
+                    if (!ftype.resultType.empty() && ftype.resultType != "void") {
+                        if (ftype.resultType == "i32") func.result = WasmValue(int32_t(0));
+                        else if (ftype.resultType == "i64") func.result = WasmValue(int64_t(0));
+                        else if (ftype.resultType == "f32") func.result = WasmValue(float(0));
+                        else if (ftype.resultType == "f64") func.result = WasmValue(double(0));
+                    }
                 }
             }
         }
@@ -217,37 +239,58 @@ FuncDef WasmParser::parseFunction(
         else if (token == "(param") {
             std::string maybeName, maybeType;
             if (iss >> maybeName) {
-                if (maybeName[0] == '$') {
-                    iss >> maybeType;
-                    maybeType.erase(remove(maybeType.begin(), maybeType.end(), ')'), maybeType.end());
-
-                    for (auto& p : func.paramNames) {
-                        if (p.name.empty() && p.type == maybeType) {
-                            p.name = maybeName;
-                            break;
-                        }
-                    }
+                if (!maybeName.empty() && maybeName[0] == '$') {
+                    iss >> maybeType;        // (param $a i32)
+                } else {
+                    maybeType = maybeName;   // (param i32)
+                    maybeName = "";
                 }
+
+                maybeType.erase(remove(maybeType.begin(), maybeType.end(), ')'), maybeType.end());
+
+                WasmValue val;
+                if (maybeType == "i32") val = WasmValue(int32_t(0));
+                else if (maybeType == "i64") val = WasmValue(int64_t(0));
+                else if (maybeType == "f32") val = WasmValue(float(0));
+                else if (maybeType == "f64") val = WasmValue(double(0));
+
+                if (maybeName.empty()) {
+                    maybeName = "param_" + std::to_string(anonCounter++);
+                }
+
+                func.params[maybeName] = val;
             }
         }
     }
 
-    if (func.index >= 0)
-        functionsByID[func.index] = func;
-    if (!func.name.empty())
-        functionByName[func.name] = func;
+    if (func.index >= 0) functionsByID[func.index] = func;
+    if (!func.name.empty()) functionByName[func.name] = func;
 
     std::cout << "\033[1;32m[parser:parseFunction]\033[0m Parsed function "
               << (func.name.empty() ? "[anon]" : func.name)
               << " (index " << func.index << ") "
-              << "params=" << func.paramNames.size()
-              << " result=" << func.result.type << "\n";
+              << "params=" << func.params.size()
+              << " result=";
+    switch (func.result.type) {
+        case ValueType::I32: std::cout << "i32"; break;
+        case ValueType::I64: std::cout << "i64"; break;
+        case ValueType::F32: std::cout << "f32"; break;
+        case ValueType::F64: std::cout << "f64"; break;
+        default: std::cout << "(none)"; break;
+    }
+    std::cout << "\n";
 
-    std::cout << "\033[1;32m[parser:parseFunction]\033[0m Params: ";
-    for (const auto& p : func.paramNames)
-        std::cout << (p.name.empty() ? "_" : p.name) << ":" << p.type << " ";
-    std::cout << "| result: " << (func.result.name.empty() ? "_" : func.result.name)
-              << ":" << func.result.type << "\n";
+    if (!func.params.empty()) {
+        std::cout << "\033[1;32m[parser:parseFunction]\033[0m Params: ";
+        for (const auto& [name, val] : func.params) {
+            const char* t = (val.type == ValueType::I32) ? "i32" :
+                            (val.type == ValueType::I64) ? "i64" :
+                            (val.type == ValueType::F32) ? "f32" : "f64";
+            std::cout << name << ":" << t << " ";
+        }
+        std::cout << "\n";
+    }
+
     return func;
 }
 
@@ -255,22 +298,55 @@ void WasmParser::print_functions(
     const std::unordered_map<std::string, FuncDef>& functionByName,
     const std::unordered_map<int, FuncDef>& functionsByID) const
 {
+    auto printParams = [](const std::unordered_map<std::string, WasmValue>& params) {
+        if (params.empty()) {
+            std::cout << "    Params: (none)\n";
+            return;
+        }
+
+        std::cout << "    Params:\n";
+        for (const auto& [name, val] : params) {
+            std::string typeStr;
+            switch (val.type) {
+                case ValueType::I32: typeStr = "i32"; break;
+                case ValueType::I64: typeStr = "i64"; break;
+                case ValueType::F32: typeStr = "f32"; break;
+                case ValueType::F64: typeStr = "f64"; break;
+            }
+
+            std::cout << "      " << (name.empty() ? "[anon]" : name)
+                      << ": " << typeStr << " = ";
+
+            switch (val.type) {
+                case ValueType::I32: std::cout << val.i32; break;
+                case ValueType::I64: std::cout << val.i64; break;
+                case ValueType::F32: std::cout << val.f32; break;
+                case ValueType::F64: std::cout << val.f64; break;
+            }
+            std::cout << "\n";
+        }
+    };
+
     std::cout << "\033[1;32m[parser:print_functions]\033[0m Functions by Name:\n";
     if (functionByName.empty()) {
         std::cout << "  (empty)\n";
     } else {
         for (const auto& [name, func] : functionByName) {
-            std::cout << "  " << name
-                      << " (index " << func.index << ")\n"
-                      << "    params=" << func.paramNames.size()
-                      << " result=" << func.result.type << "\n";
-
-            if (!func.paramNames.empty()) {
-                std::cout << "    Params:\n";
-                for (const auto& p : func.paramNames)
-                    std::cout << "      " << (p.name.empty() ? "[anon]" : p.name)
-                              << ": " << p.type << "\n";
+            std::cout << "\033[1;32m[parser:parseFunction]\033[0m Parsed function "
+              << (func.name.empty() ? "[anon]" : func.name)
+              << " (index " << func.index << ") "
+              << "params=" << func.params.size()
+              << " result="; 
+            switch (func.result.type) {
+                case ValueType::I32: std::cout << "i32"; break;
+                case ValueType::I64: std::cout << "i64"; break;
+                case ValueType::F32: std::cout << "f32"; break;
+                case ValueType::F64: std::cout << "f64"; break;
+                default: std::cout << "(none)"; break;
             }
+            std::cout << "\n";
+
+            printParams(func.params);
 
             if (!func.body.empty()) {
                 std::cout << "    Body:\n";
@@ -291,15 +367,18 @@ void WasmParser::print_functions(
         for (const auto& [id, func] : functionsByID) {
             std::cout << "  Index " << id
                       << " " << (func.name.empty() ? "[anon]" : func.name) << "\n"
-                      << "    params=" << func.paramNames.size()
-                      << " result=" << func.result.type << "\n";
-
-            if (!func.paramNames.empty()) {
-                std::cout << "    Params:\n";
-                for (const auto& p : func.paramNames)
-                    std::cout << "      " << (p.name.empty() ? "[anon]" : p.name)
-                              << ": " << p.type << "\n";
+                      << "    params=" << func.params.size()
+                      << " result=";
+            switch (func.result.type) {
+                case ValueType::I32: std::cout << "i32"; break;
+                case ValueType::I64: std::cout << "i64"; break;
+                case ValueType::F32: std::cout << "f32"; break;
+                case ValueType::F64: std::cout << "f64"; break;
+                default: std::cout << "(none)"; break;
             }
+            std::cout << "\n";
+
+            printParams(func.params);
 
             if (!func.body.empty()) {
                 std::cout << "    Body:\n";
@@ -341,7 +420,6 @@ void WasmParser::parseBody(const std::string& line, FuncDef* func, bool toRemove
         std::cout << "\033[1;33m[parser:parseBody]\033[0m Skipped empty/comment-only line.\n";
     }
 }
-
 
 void WasmParser::parseMemory(const std::string& line, WasmMemory& memory) {
     std::cout << "\033[1;32m[parser:parseMemory]\033[0m Parsing memory line: " << line << "\n";

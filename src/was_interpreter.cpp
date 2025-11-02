@@ -114,9 +114,10 @@ void WasmInterpreter::callFunctionByExportName(const std::string& exportName) {
 
     std::cout << "\033[1;34m[interpreter:callFunctionByExportName]\033[0m Calling function '" 
               << exp.name << "' (index " << exp.index << ").\n";
-
+    WasmMemory memoryCopy = memory;
+    std::unordered_map<std::string, WasmGlobal> globalsCopy = globals;
     if (functionsByID.find(exp.index) != functionsByID.end()) {
-        executor.execute(functionsByID[exp.index], functionsByID, functionByName, memory, globals);
+        executor.execute(functionsByID[exp.index], functionsByID, functionByName, memoryCopy, globalsCopy);
     }
     
 }

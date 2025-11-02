@@ -17,8 +17,21 @@ int64_t  WasmMemory::load64(uint32_t addr) const          { return readBytes<int
 float    WasmMemory::loadF32(uint32_t addr) const         { return readBytes<float>(addr); }
 double   WasmMemory::loadF64(uint32_t addr) const         { return readBytes<double>(addr); }
 
-void WasmMemory::grow(size_t additionalPages) {
-    data.resize(data.size() + additionalPages * PAGE_SIZE, 0);
+int32_t WasmMemory::grow(int32_t  additionalPages) {
+    if (additionalPages < 0) return -1;
+
+    size_t oldPages = sizeInPages();
+    size_t newSize = data.size() + (static_cast<size_t>(additionalPages) * PAGE_SIZE);
+
+    try {
+        data.resize(newSize, 0);
+        std::cout << "\033[1;36m[memory:grow]\033[0m from " << oldPages 
+                  << " → " << sizeInPages() << " pages (+" << additionalPages << ")\n";
+        return static_cast<int32_t>(oldPages);
+    } catch (const std::bad_alloc&) {
+        std::cerr << "\033[1;31m[memory:grow]\033[0m failed to allocate additional pages\n";
+        return -1; // grow failed
+    }
 }
 
 void WasmMemory::debugPrint(uint32_t start, uint32_t count) const {

@@ -2,6 +2,8 @@
 
 #include <vector>
 #include <string>
+#include <unordered_map>
+#include <cstdint>
 
 struct FuncType {
     std::vector<std::string> params = {};
@@ -11,20 +13,6 @@ struct FuncType {
 struct Value {
     std::string name = "";
     std::string type = "";
-};
-
-struct FuncDef {
-    int index = -1;
-    std::vector<Value> paramNames = {};
-    Value result = {};
-    std::string name = "";
-    std::vector<std::string> body = {};
-};
-
-struct WasmExport {
-    std::string name;
-    std::string kind;
-    int index; 
 };
 
 enum class ValueType {
@@ -48,6 +36,20 @@ struct WasmValue {
     explicit WasmValue(int64_t v) : type(ValueType::I64), i64(v) {}
     explicit WasmValue(float v)   : type(ValueType::F32), f32(v) {}
     explicit WasmValue(double v)  : type(ValueType::F64), f64(v) {}
+};
+
+struct FuncDef {
+    int index = -1;
+    std::unordered_map<std::string, WasmValue> params = {};  // 🔥 nome → valore
+    WasmValue result = {};
+    std::string name = "";
+    std::vector<std::string> body = {};
+};
+
+struct WasmExport {
+    std::string name;
+    std::string kind;
+    int index;
 };
 
 struct WasmGlobal {
