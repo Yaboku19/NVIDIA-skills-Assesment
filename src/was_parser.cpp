@@ -1,5 +1,6 @@
 #include "wasm_parser.hpp"
 #include "wasm_stack.hpp"
+#include "wasm_memory.hpp"
 #include <iostream>
 #include <sstream>
 #include <algorithm> 
@@ -274,3 +275,41 @@ void WasmParser::parseBody(const std::string& line, FuncDef* func, bool toRemove
         std::cout << "\033[1;33m[parser:parseBody]\033[0m Skipped empty line after cleaning.\n";
     }
 }
+
+void WasmParser::parseMemory(const std::string& line, std::unordered_map<int, WasmMemory>& memories) {
+    std::cout << "\033[1;32m[parser:parseMemory]\033[0m Parsing memory line: " << line << "\n";
+
+    std::istringstream iss(line);
+    std::string token;
+    int memoryIndex = 0;
+    size_t initialPages = 1;
+
+    while (iss >> token) {
+        if (token.rfind("(;", 0) == 0 && token.find(";") != std::string::npos) {
+            try {
+                size_t start = token.find(';') + 1;
+                size_t end = token.find(';', start);
+                memoryIndex = std::stoi(token.substr(start, end - start));
+            } catch (...) {
+                memoryIndex = 0;
+            }
+        }
+        else if (std::isdigit(token[0])) {
+            try {
+                initialPages = std::stoul(token);
+            } catch (...) {
+                initialPages = 1;
+            }
+        }
+    }
+
+    WasmMemory mem(initialPages);
+    mem.setIndex(memoryIndex);
+
+    memories[memoryIndex] = mem;
+
+    std::cout << "\033[1;32m[parser:parseMemory]\033[0m Created memory index "
+              << memoryIndex << " with " << initialPages << " page(s) = "
+              << (initialPages * WasmMemory::PAGE_SIZE) << " bytes.\n";
+}
+

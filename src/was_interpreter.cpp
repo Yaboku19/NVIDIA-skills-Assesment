@@ -92,5 +92,12 @@ void WasmInterpreter::executeLine(const std::string& line) {
         parser.print_functions(functionByName, functionsByID);
         inFunction = true;
         brakes = 1;
+    } else if (token.find("memory") != std::string::npos) {
+        parser.parseMemory(trimmed, memoriesByIndex);
+        for (const auto& [idx, mem] : memoriesByIndex) {
+            mem.debugPrint(0, 64);
+        }
+    } else {
+        std::cout << "\033[1;31m[interpreter:executeLine]\033[0m Unknown instruction: " + token + "\n";
     }
 }

@@ -4,6 +4,7 @@
 #include <functional>
 #include "wasm_stack.hpp"
 #include "wasm_parser.hpp"
+#include "wasm_memory.hpp"
 #include "struct.h"
 
 class WasmInterpreter {
@@ -23,6 +24,8 @@ private:
     std::unordered_map<int, FuncType> funcTypes; // type index → signature
     std::unordered_map<int, FuncDef> functionsByID;
     std::unordered_map<std::string, FuncDef> functionByName;
+
+    std::unordered_map<int, WasmMemory> memoriesByIndex;
 
     void executeLine(const std::string& line);
 };
