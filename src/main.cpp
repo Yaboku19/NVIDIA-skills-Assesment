@@ -48,6 +48,14 @@ int main(int argc, char** argv) {
         interpreter.showMemory(0, 128);
         interpreter.callFunctionByExportName("_test_locals_tee");
         interpreter.showMemory(0, 128);
+        //interpreter.callFunctionByExportName("_test_global_increment");
+        //interpreter.showMemory(0, 128);
+        //interpreter.callFunctionByExportName("_test_global_constant");
+        //interpreter.showMemory(0, 128);
+        //interpreter.callFunctionByExportName("_test_global_multiple");
+        //interpreter.showMemory(0, 128);
+        interpreter.callFunctionByExportName("_test_combined");
+        interpreter.showMemory(0, 128);
     } catch (const std::exception& e) {
         std::cerr << "Error: " << e.what() << "\n";
         return 1;
