@@ -11,7 +11,9 @@ int main(int argc, char** argv) {
     try {
         WasmInterpreter interpreter;
         interpreter.loadFile(filename);
-        interpreter.run();
+        interpreter.parse();
+        interpreter.callFunctionByExportName("_start");
+        interpreter.showMemoryByID(0, 0, 128);
     } catch (const std::exception& e) {
         std::cerr << "Error: " << e.what() << "\n";
         return 1;

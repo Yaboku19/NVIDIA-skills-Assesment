@@ -17,31 +17,23 @@ void WasmInterpreter::loadFile(const std::string& path) {
         std::istreambuf_iterator<char>());
 }
 
-void WasmInterpreter::run() {
-    std::cout << "\033[1;34m[interpreter:run]\033[0m Executing simplified WebAssembly:\n";
+void WasmInterpreter::parse() {
+    std::cout << "\033[1;34m[interpreter:parse]\033[0m Parsing simplified WebAssembly:\n";
 
     std::istringstream stream(sourceCode);
     std::string line;
 
     while (std::getline(stream, line)) {
-        std::cout << "\033[1;34m[interpreter:run]\033[0m Executing line: " << line << "\n";
+        std::cout << "\033[1;34m[interpreter:parse]\033[0m Parsing line: " << line << "\n";
         executeLine(line);
     }
-
-    // if (!stack.empty()) {
-    //     std::cout << "Final stack state: ";
-    //     for (auto v : stack) std::cout << v << " ";
-    //     std::cout << "\n";
-    // } else {
-    //     std::cout << "Stack is empty.\n";
-    // }
 }
 
 void WasmInterpreter::executeLine(const std::string& line) {
     std::string trimmed = line;
     trimmed.erase(0, trimmed.find_first_not_of(" \t"));
 
-    if (trimmed.empty() || trimmed.rfind(";;", 0) == 0) {
+    if (trimmed.empty() || trimmed.rfind(";;", 0) == 0 || trimmed.rfind(")", 0) == 0) {
         std::cout << "\033[1;34m[interpreter:executeLine]\033[0m skipped\n";
         return;
     }
@@ -82,25 +74,74 @@ void WasmInterpreter::executeLine(const std::string& line) {
         parser.parseModule(stack, globals);
     } else if (token.find("global") != std::string::npos) {
         parser.parseGlobal(trimmed, globals);
-        parser.print_globals(globals);
+        //parser.print_globals(globals);
     } else if (token.find("type") != std::string::npos) {
         parser.parseType(trimmed, funcTypes);
     } else if (token.find("func") != std::string::npos) {
         FuncDef fun = parser.parseFunction(trimmed, functionsByID, functionByName, funcTypes);
         functionName = fun.name;
         functionIndex = fun.index;
-        parser.print_functions(functionByName, functionsByID);
+        //parser.print_functions(functionByName, functionsByID);
         inFunction = true;
         brakes = 1;
     } else if (token.find("memory") != std::string::npos) {
         parser.parseMemory(trimmed, memoriesByIndex);
-        for (const auto& [idx, mem] : memoriesByIndex) {
-            mem.debugPrint(0, 64);
-        }
+        // for (const auto& [idx, mem] : memoriesByIndex) {
+        //     mem.debugPrint(0, 64);
+        // }
     } else if (token.find("export") != std::string::npos) {
         parser.parseExport(trimmed, exports);
-        parser.print_exports(exports);
+        //parser.print_exports(exports);
     } else {
         std::cout << "\033[1;31m[interpreter:executeLine]\033[0m Unknown instruction: " + token + "\n";
     }
 }
+
+void WasmInterpreter::callFunctionByExportName(const std::string& exportName) {
+    auto it = exports.find(exportName);
+    if (it == exports.end()) {
+        std::cout << "\033[1;31m[interpreter:callFunctionByExportName]\033[0m Export '" 
+                  << exportName << "' not found.\n";
+        return;
+    }
+
+    const WasmExport& exp = it->second;
+    if (exp.kind != "func") {
+        std::cout << "\033[1;33m[interpreter:callFunctionByExportName]\033[0m '" 
+                  << exportName << "' is not a function (kind=" << exp.kind << ").\n";
+        return;
+    }
+
+    std::cout << "\033[1;34m[interpreter:callFunctionByExportName]\033[0m Calling function '" 
+              << exp.name << "' (index " << exp.index << ").\n";
+
+    if (functionsByID.find(exp.index) != functionsByID.end()) {
+        const auto& func = functionsByID[exp.index];
+        std::cout << "Function body:\n";
+        for (const auto& line : func.body)
+            std::cout << "  " << line << "\n";
+        executor.execute(func, functionsByID, memoriesByIndex, globals, stack);
+    }
+    
+}
+
+void WasmInterpreter::showMemoryByID(int memoryID, uint32_t start, uint32_t count) {
+    auto it = memoriesByIndex.find(memoryID);
+    if (it == memoriesByIndex.end()) {
+        std::cout << "\033[1;31m[interpreter:showMemoryByID]\033[0m "
+                  << "Memory index " << memoryID << " not found.\n";
+        return;
+    }
+
+    WasmMemory &mem = it->second;
+
+    std::cout << "\033[1;34m[interpreter:showMemoryByID]\033[0m "
+              << "Memory index " << mem.getIndex()
+              << " | pages: " << mem.sizeInPages()
+              << " | total bytes: " << (mem.sizeInPages() * WasmMemory::PAGE_SIZE)
+              << "\n";
+
+    mem.debugPrint(start, count);
+}
+
+
