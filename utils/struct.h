@@ -60,4 +60,5 @@ struct WasmGlobal {
 struct BlockInfo {
     size_t startPC;
     bool isLoop;
+    std::string label;
 };

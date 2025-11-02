@@ -90,6 +90,19 @@ void WasmExecutor::execute(
         else stack.push(WasmValue(static_cast<double>(val)));
         std::cout << "\033[1;36m[executor:" << tag << "]\033[0m mem[" << addr.i32 << "] → " << static_cast<double>(val) << "\n";
     };
+    
+    auto resolveDepth = [&](const std::string& tok) -> int {
+        if (!tok.empty() && tok[0] == '$') {
+            for (int i = (int)blockStack.size()-1, d = 0; i >= 0; --i, ++d) {
+                if (blockStack[i].label == tok) return d;
+            }
+            std::cerr << "\033[1;31m[executor]\033[0m unknown label " << tok << " -> depth=0\n";
+            return 0;
+        }
+        try { return std::stoi(tok); }
+        catch (...) { return 0; }
+    };
+
 
     auto safeDiv32 = [](int32_t a, int32_t b) { return b == 0 ? 0 : a / b; };
     auto safeDiv64 = [](int64_t a, int64_t b) { return b == 0 ? 0 : a / b; };
@@ -234,12 +247,18 @@ void WasmExecutor::execute(
             }
             continue;
         } else if (op == "block") {
-            std::cout << "\033[1;36m[executor:block]\033[0m begin block (pc=" << pc << ")\n";
-            blockStack.push_back({pc, false});
+            std::string lbl;
+            if (iss >> lbl && !lbl.empty() && lbl[0] == '$') {
+                std::cout << "\033[1;36m[executor:block]\033[0m begin block " << lbl << " (pc=" << pc << ")\n";
+                blockStack.push_back({pc, false, lbl});
+            } else {
+                std::cout << "\033[1;36m[executor:block]\033[0m begin block (pc=" << pc << ")\n";
+                blockStack.push_back({pc, false, ""});
+            }
             continue;
         } else if (op == "br_if") {
-            int32_t depth = 0;
-            iss >> depth;
+            std::string tok; iss >> tok; 
+            int32_t depth = tok.empty() ? 0 : resolveDepth(tok);
             WasmValue cond = stack.pop();
             bool condition = (cond.i32 != 0);
 
@@ -247,28 +266,22 @@ void WasmExecutor::execute(
                     << " condition=" << cond.i32
                     << " (" << (condition ? "true" : "false") << ")\n";
 
-            if (condition) {
-                // chiama logica comune del br
-                op = "br";
-            } else continue;
-        } else if (op == "br") {
-            int32_t depth = 0;
-            iss >> depth;
-            std::cout << "\033[1;36m[executor:br]\033[0m depth=" << depth << "\n";
+            if (!condition) continue;
 
-            if (depth >= blockStack.size()) {
-                std::cerr << "\033[1;31m[executor:br]\033[0m invalid depth!\n";
+            if (depth < 0 || depth >= static_cast<int32_t>(blockStack.size())) {
+                std::cerr << "\033[1;31m[executor:br_if]\033[0m invalid depth!\n";
                 continue;
             }
 
             BlockInfo target = blockStack[blockStack.size() - 1 - depth];
+            std::cout << "\033[1;36m[executor:br_if]\033[0m → target "
+                    << (target.isLoop ? "loop" : "block")
+                    << " (pc=" << target.startPC << ")\n";
 
             if (target.isLoop) {
-                // salta all'inizio del loop
-                std::cout << "\033[1;36m[executor:br]\033[0m jump back to loop start (pc=" << target.startPC << ")\n";
-                pc = target.startPC - 1;
+                std::cout << "\033[1;36m[executor:br_if]\033[0m → continue loop\n";
+                pc = target.startPC;
             } else {
-                // salta in avanti fino all'end del blocco
                 int open = 0;
                 for (++pc; pc < func.body.size(); ++pc) {
                     const std::string& next = func.body[pc];
@@ -278,8 +291,46 @@ void WasmExecutor::execute(
                         open--;
                     }
                 }
-                std::cout << "\033[1;36m[executor:br]\033[0m break to end of block\n";
+                std::cout << "\033[1;36m[executor:br_if]\033[0m → break to end of block\n";
+                while (!blockStack.empty() && blockStack.back().startPC >= target.startPC)
+                    blockStack.pop_back();
             }
+
+            continue;
+        } else if (op == "br") {
+            std::string tok; iss >> tok; 
+            int32_t depth = tok.empty() ? 0 : resolveDepth(tok);
+            std::cout << "\033[1;36m[executor:br]\033[0m depth=" << depth << "\n";
+
+            if (depth < 0 || depth >= static_cast<int32_t>(blockStack.size())) {
+                std::cerr << "\033[1;31m[executor:br]\033[0m invalid depth!\n";
+                continue;
+            }
+
+            BlockInfo target = blockStack[blockStack.size() - 1 - depth];
+            std::cout << "\033[1;36m[executor:br]\033[0m → target "
+                    << (target.isLoop ? "loop" : "block")
+                    << " (pc=" << target.startPC << ")\n";
+
+            if (target.isLoop) {
+                std::cout << "\033[1;36m[executor:br]\033[0m → continue loop\n";
+                pc = target.startPC;
+            } else {
+                int open = 0;
+                for (++pc; pc < func.body.size(); ++pc) {
+                    const std::string& next = func.body[pc];
+                    if (next == "block" || next == "loop") open++;
+                    else if (next == "end") {
+                        if (open == 0) break;
+                        open--;
+                    }
+                }
+                std::cout << "\033[1;36m[executor:br]\033[0m → break to end of block\n";
+
+                while (!blockStack.empty() && blockStack.back().startPC >= target.startPC)
+                    blockStack.pop_back();
+            }
+
             continue;
         } else if (op == "end") {
             if (!blockStack.empty()) blockStack.pop_back();
@@ -295,8 +346,63 @@ void WasmExecutor::execute(
             }
             continue;
         } else if (op == "loop") {
-            std::cout << "\033[1;36m[executor:loop]\033[0m begin loop (pc=" << pc << ")\n";
-            blockStack.push_back({pc, true});
+            std::string lbl;
+            if (iss >> lbl && !lbl.empty() && lbl[0] == '$') {
+                std::cout << "\033[1;36m[executor:loop]\033[0m begin loop " << lbl << " (pc=" << pc << ")\n";
+                blockStack.push_back({pc, true, lbl});
+            } else {
+                std::cout << "\033[1;36m[executor:loop]\033[0m begin loop (pc=" << pc << ")\n";
+                blockStack.push_back({pc, true, ""});
+            }
+            continue;
+        } else if (op == "br_table") {
+            std::vector<std::string> labels;
+            std::string tok;
+            while (iss >> tok)
+                labels.push_back(tok);
+            if (labels.empty()) {
+                std::cerr << "\033[1;31m[executor:br_table]\033[0m no labels found!\n";
+                continue;
+            }
+            WasmValue indexVal = stack.pop();
+            uint32_t index = static_cast<uint32_t>(indexVal.i32);
+            std::cout << "\033[1;36m[executor:br_table]\033[0m index=" << index << " → ";
+
+            std::string targetLabel = (index < labels.size() - 1) 
+                ? labels[index] 
+                : labels.back();
+            std::cout << "target=" << targetLabel << "\n";
+
+            int depth = resolveDepth(targetLabel);
+            if (depth < 0 || depth >= static_cast<int32_t>(blockStack.size())) {
+                std::cerr << "\033[1;31m[executor:br_table]\033[0m invalid depth for label "
+                          << targetLabel << "!\n";
+                continue;
+            }
+
+            BlockInfo target = blockStack[blockStack.size() - 1 - depth];
+            std::cout << "\033[1;36m[executor:br_table]\033[0m → target "
+                      << (target.isLoop ? "loop" : "block")
+                      << " (pc=" << target.startPC << ")\n";
+
+            if (target.isLoop) {
+                std::cout << "\033[1;36m[executor:br_table]\033[0m → continue loop\n";
+                pc = target.startPC;
+            } else {
+                int open = 0;
+                for (++pc; pc < func.body.size(); ++pc) {
+                    const std::string& next = func.body[pc];
+                    if (next == "block" || next == "loop") open++;
+                    else if (next == "end") {
+                        if (open == 0) break;
+                        open--;
+                    }
+                }
+                std::cout << "\033[1;36m[executor:br_table]\033[0m → break to end of block\n";
+
+                while (!blockStack.empty() && blockStack.back().startPC >= target.startPC)
+                    blockStack.pop_back();
+            }
             continue;
         } else if (op.rfind("i32.", 0) == 0) {
             if (op == "i32.add") binaryOp([](int32_t a, int32_t b){ return a + b; }, op, ValueType::I32);
