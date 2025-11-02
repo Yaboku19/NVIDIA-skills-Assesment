@@ -18,6 +18,10 @@ public:
 
     void dump();
 
+    bool empty() const {
+        return data.empty();
+    }
+
 private:
     std::vector<WasmValue> data;
 

@@ -56,3 +56,8 @@ struct WasmGlobal {
     bool mutableFlag;
     WasmValue value;
 };
+
+struct BlockInfo {
+    size_t startPC;
+    bool isLoop;
+};

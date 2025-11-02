@@ -321,27 +321,29 @@ void WasmParser::parseBody(const std::string& line, FuncDef* func, bool toRemove
         std::cout << "\033[1;31m[parser:parseBody]\033[0m Error: Function definition is null.\n";
         return;
     }
-
     std::string cleaned = line;
-    while (!cleaned.empty() && std::isspace(cleaned.back()))
+    size_t commentPos = cleaned.find(";;");
+    if (commentPos != std::string::npos)
+        cleaned = cleaned.substr(0, commentPos);
+    while (!cleaned.empty() && std::isspace(static_cast<unsigned char>(cleaned.back())))
         cleaned.pop_back();
     if (toRemove) {
         if (!cleaned.empty() && cleaned.back() == ')') {
             cleaned.pop_back();
-            while (!cleaned.empty() && std::isspace(cleaned.back()))
+            while (!cleaned.empty() && std::isspace(static_cast<unsigned char>(cleaned.back())))
                 cleaned.pop_back();
         }
     }
-
     if (!cleaned.empty()) {
         func->body.push_back(cleaned);
         std::cout << "\033[1;32m[parser:parseBody]\033[0m Added line to function "
                   << (func->name.empty() ? "[anon]" : func->name)
                   << ": " << cleaned << "\n";
     } else {
-        std::cout << "\033[1;33m[parser:parseBody]\033[0m Skipped empty line after cleaning.\n";
+        std::cout << "\033[1;33m[parser:parseBody]\033[0m Skipped empty/comment-only line.\n";
     }
 }
+
 
 void WasmParser::parseMemory(const std::string& line, WasmMemory& memory) {
     std::cout << "\033[1;32m[parser:parseMemory]\033[0m Parsing memory line: " << line << "\n";

@@ -14,6 +14,7 @@ public:
     void parse();
     void callFunctionByExportName(const std::string& exportName);
     void showMemory(uint32_t start, uint32_t count);
+    std::unordered_map<std::string, WasmExport> getExports() const;
 private:
     std::string sourceCode;
     WasmStack stack;

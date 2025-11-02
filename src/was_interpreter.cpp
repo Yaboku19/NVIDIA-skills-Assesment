@@ -131,4 +131,6 @@ void WasmInterpreter::showMemory(uint32_t start, uint32_t count) {
     memory.debugPrint(start, count);
 }
 
-
+std::unordered_map<std::string, WasmExport> WasmInterpreter::getExports() const {
+    return exports;
+}
