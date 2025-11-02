@@ -313,3 +313,48 @@ void WasmParser::parseMemory(const std::string& line, std::unordered_map<int, Wa
               << (initialPages * WasmMemory::PAGE_SIZE) << " bytes.\n";
 }
 
+void WasmParser::parseExport(const std::string& line,
+                             std::unordered_map<std::string, WasmExport>& exports)
+{
+    std::istringstream iss(line);
+    std::string token;
+    WasmExport exp;
+
+    iss >> token;
+    iss >> exp.name;
+
+    if (!exp.name.empty() && exp.name.front() == '"')
+        exp.name = exp.name.substr(1, exp.name.size() - 2);
+
+    std::string kind, indexStr;
+    iss >> token;
+    if (token[0] == '(') token.erase(0, 1);
+    kind = token;
+
+    iss >> indexStr;
+    try {
+        exp.index = std::stoi(indexStr);
+    } catch (...) {
+        exp.index = -1;
+    }
+
+    exp.kind = kind;
+    exports[exp.name] = exp;
+
+    std::cout << "\033[1;32m[parser:parseExport]\033[0m Exported "
+              << exp.kind << " '" << exp.name
+              << "' (index " << exp.index << ")\n";
+}
+
+void WasmParser::print_exports(const std::unordered_map<std::string, WasmExport>& exports) const {
+    std::cout << "\033[1;32m[parser:print_exports]\033[0m Exported items:\n";
+    if (exports.empty()) {
+        std::cout << "  (empty)\n";
+        return;
+    }
+
+    for (const auto& [name, exp] : exports) {
+        std::cout << "  " << exp.kind << " '" << name
+                  << "' (index " << exp.index << ")\n";
+    }
+}

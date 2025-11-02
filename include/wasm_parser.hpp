@@ -16,6 +16,9 @@ public:
                        const std::unordered_map<int, FuncType>& funcTypes);
     void parseBody(const std::string& line, FuncDef *func, bool toRemove);
     void parseMemory(const std::string& line, std::unordered_map<int, WasmMemory>& memoriesByIndex);
+    void parseExport(const std::string& line, std::unordered_map<std::string, WasmExport>& exports);
+    
+    void print_exports(const std::unordered_map<std::string, WasmExport>& exports) const;
     void print_globals(const std::unordered_map<std::string, int32_t>& globals) const;
     void print_functions(const std::unordered_map<std::string, FuncDef>& functionByName, const std::unordered_map<int, FuncDef>& functionsByID) const;
 };

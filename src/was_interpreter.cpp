@@ -97,6 +97,9 @@ void WasmInterpreter::executeLine(const std::string& line) {
         for (const auto& [idx, mem] : memoriesByIndex) {
             mem.debugPrint(0, 64);
         }
+    } else if (token.find("export") != std::string::npos) {
+        parser.parseExport(trimmed, exports);
+        parser.print_exports(exports);
     } else {
         std::cout << "\033[1;31m[interpreter:executeLine]\033[0m Unknown instruction: " + token + "\n";
     }

@@ -24,8 +24,8 @@ private:
     std::unordered_map<int, FuncType> funcTypes; // type index → signature
     std::unordered_map<int, FuncDef> functionsByID;
     std::unordered_map<std::string, FuncDef> functionByName;
-
     std::unordered_map<int, WasmMemory> memoriesByIndex;
-
+    std::unordered_map<std::string, WasmExport> exports;
+    
     void executeLine(const std::string& line);
 };

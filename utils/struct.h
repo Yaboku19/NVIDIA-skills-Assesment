@@ -20,3 +20,9 @@ struct FuncDef {
     std::string name = "";
     std::vector<std::string> body = {};
 };
+
+struct WasmExport {
+    std::string name;
+    std::string kind;
+    int index; 
+};
