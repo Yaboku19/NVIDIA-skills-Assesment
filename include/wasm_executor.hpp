@@ -10,8 +10,8 @@ class WasmExecutor {
 public:
     void execute(const FuncDef& func,
     std::unordered_map<int, FuncDef>& functionsByID,
+    std::unordered_map<std::string, FuncDef>& functionByName,
     WasmMemory& memory,
-    std::unordered_map<std::string, WasmGlobal>& globals,
-    WasmStack& stack);
+    std::unordered_map<std::string, WasmGlobal>& globals);
 private:
 };

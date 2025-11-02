@@ -1,5 +1,4 @@
 #pragma once
-#include "wasm_stack.hpp"
 #include "wasm_memory.hpp"
 #include <unordered_map>
 #include <string>
@@ -8,7 +7,7 @@
 
 class WasmParser {
 public:
-    void parseModule(WasmStack& stack, std::unordered_map<std::string, WasmGlobal>& globals);
+    void parseModule( std::unordered_map<std::string, WasmGlobal>& globals);
     void parseGlobal(const std::string& line, std::unordered_map<std::string, WasmGlobal>& globals);
     void parseType(const std::string& line, std::unordered_map<int, FuncType>& funcTypes);
     FuncDef parseFunction(const std::string& line, std::unordered_map<int, FuncDef>& functionsByID,

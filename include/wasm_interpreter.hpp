@@ -17,7 +17,6 @@ public:
     std::unordered_map<std::string, WasmExport> getExports() const;
 private:
     std::string sourceCode;
-    WasmStack stack;
     WasmParser parser;
     WasmExecutor executor;
     bool inFunction = false;
@@ -26,7 +25,7 @@ private:
     int brakes = 0;
     std::unordered_map<std::string, WasmGlobal> globals;
 
-    std::unordered_map<int, FuncType> funcTypes; // type index → signature
+    std::unordered_map<int, FuncType> funcTypes;
     std::unordered_map<int, FuncDef> functionsByID;
     std::unordered_map<std::string, FuncDef> functionByName;
     WasmMemory memory{1};

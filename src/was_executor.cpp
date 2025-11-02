@@ -16,10 +16,11 @@ static inline int popcount64(uint64_t x) { return __builtin_popcountll(x); }
 void WasmExecutor::execute(
     const FuncDef& func,
     std::unordered_map<int, FuncDef>& functionsByID,
+    std::unordered_map<std::string, FuncDef>& functionByName,
     WasmMemory& memory,
-    std::unordered_map<std::string, WasmGlobal>& globals,
-    WasmStack& stack
+    std::unordered_map<std::string, WasmGlobal>& globals
 ) {
+    WasmStack stack;
     stack.clear();
     std::unordered_map<std::string, WasmValue> locals;
     std::cout << "\033[1;36m[executor:execute]\033[0m Executing function '" << func.name << "' (index " << func.index << ").\n";
@@ -101,6 +102,13 @@ void WasmExecutor::execute(
         }
         try { return std::stoi(tok); }
         catch (...) { return 0; }
+    };
+
+    auto firstTok = [](const std::string& s) {
+        std::istringstream is(s);
+        std::string t; 
+        is >> t;
+        return t;
     };
 
 
@@ -283,19 +291,26 @@ void WasmExecutor::execute(
                 pc = target.startPC;
             } else {
                 int open = 0;
+                int toClose = depth + 1;
+
                 for (++pc; pc < func.body.size(); ++pc) {
-                    const std::string& next = func.body[pc];
-                    if (next == "block" || next == "loop") open++;
-                    else if (next == "end") {
-                        if (open == 0) break;
-                        open--;
+                    std::string t = firstTok(func.body[pc]);
+                    if (t == "block" || t == "loop") {
+                        ++open;
+                    } else if (t == "end") {
+                        if (open == 0) {
+                            --toClose;
+                            if (toClose == 0) break;
+                        } else {
+                            --open;
+                        }
                     }
                 }
-                std::cout << "\033[1;36m[executor:br_if]\033[0m → break to end of block\n";
-                while (!blockStack.empty() && blockStack.back().startPC >= target.startPC)
+                int pops = depth + 1;
+                while (pops-- > 0 && !blockStack.empty())
                     blockStack.pop_back();
+                continue;
             }
-
             continue;
         } else if (op == "br") {
             std::string tok; iss >> tok; 
@@ -317,20 +332,27 @@ void WasmExecutor::execute(
                 pc = target.startPC;
             } else {
                 int open = 0;
+                int toClose = depth + 1;
+
                 for (++pc; pc < func.body.size(); ++pc) {
-                    const std::string& next = func.body[pc];
-                    if (next == "block" || next == "loop") open++;
-                    else if (next == "end") {
-                        if (open == 0) break;
-                        open--;
+                    std::string t = firstTok(func.body[pc]);
+                    if (t == "block" || t == "loop") {
+                        ++open;
+                    } else if (t == "end") {
+                        if (open == 0) {
+                            --toClose;
+                            if (toClose == 0) break;
+                        } else {
+                            --open;
+                        }
                     }
                 }
                 std::cout << "\033[1;36m[executor:br]\033[0m → break to end of block\n";
-
-                while (!blockStack.empty() && blockStack.back().startPC >= target.startPC)
+                int pops = depth + 1;
+                while (pops-- > 0 && !blockStack.empty())
                     blockStack.pop_back();
+                continue;
             }
-
             continue;
         } else if (op == "end") {
             if (!blockStack.empty()) blockStack.pop_back();
@@ -390,18 +412,27 @@ void WasmExecutor::execute(
                 pc = target.startPC;
             } else {
                 int open = 0;
+                int toClose = depth + 1;
+
                 for (++pc; pc < func.body.size(); ++pc) {
-                    const std::string& next = func.body[pc];
-                    if (next == "block" || next == "loop") open++;
-                    else if (next == "end") {
-                        if (open == 0) break;
-                        open--;
+                    std::string t = firstTok(func.body[pc]);
+                    if (t == "block" || t == "loop") {
+                        ++open;
+                    } else if (t == "end") {
+                        if (open == 0) {
+                            --toClose;
+                            if (toClose == 0) break;
+                        } else {
+                            --open;
+                        }
                     }
                 }
                 std::cout << "\033[1;36m[executor:br_table]\033[0m → break to end of block\n";
-
-                while (!blockStack.empty() && blockStack.back().startPC >= target.startPC)
+                int pops = depth + 1;
+                while (pops-- > 0 && !blockStack.empty())
                     blockStack.pop_back();
+
+                continue;
             }
             continue;
         } else if (op.rfind("i32.", 0) == 0) {

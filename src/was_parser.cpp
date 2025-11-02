@@ -1,16 +1,14 @@
 #include "wasm_parser.hpp"
-#include "wasm_stack.hpp"
 #include "wasm_memory.hpp"
 #include <iostream>
 #include <sstream>
 #include <algorithm> 
 #include <regex>
 
-void WasmParser::parseModule(WasmStack& stack, std::unordered_map<std::string, WasmGlobal>& globals) {
-    stack.clear();
+void WasmParser::parseModule(std::unordered_map<std::string, WasmGlobal>& globals) {
     globals.clear();
 
-    std::cout << "\033[1;32m[parser:parseModule]\033[0m New module initialized. Stack and globals cleared.\n";
+    std::cout << "\033[1;32m[parser:parseModule]\033[0m New module initialized. Globals cleared.\n";
 }
 
 void WasmParser::parseGlobal(const std::string& line, std::unordered_map<std::string, WasmGlobal>& globals) {

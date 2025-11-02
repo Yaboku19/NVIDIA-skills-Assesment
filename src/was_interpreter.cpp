@@ -71,7 +71,7 @@ void WasmInterpreter::executeLine(const std::string& line) {
         else
             parser.parseBody(trimmed, &functionByName[functionName], toRemove);
     } else if (token.find("module") != std::string::npos) {
-        parser.parseModule(stack, globals);
+        parser.parseModule(globals);
     } else if (token.find("global") != std::string::npos) {
         parser.parseGlobal(trimmed, globals);
         //parser.print_globals(globals);
@@ -116,7 +116,7 @@ void WasmInterpreter::callFunctionByExportName(const std::string& exportName) {
               << exp.name << "' (index " << exp.index << ").\n";
 
     if (functionsByID.find(exp.index) != functionsByID.end()) {
-        executor.execute(functionsByID[exp.index], functionsByID, memory, globals, stack);
+        executor.execute(functionsByID[exp.index], functionsByID, functionByName, memory, globals);
     }
     
 }
