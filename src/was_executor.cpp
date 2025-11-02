@@ -12,10 +12,11 @@ void WasmExecutor::execute(
     const FuncDef& func,
     std::unordered_map<int, FuncDef>& functionsByID,
     WasmMemory& memory,
-    std::unordered_map<std::string, int32_t>& globals,
+    std::unordered_map<std::string, WasmGlobal>& globals,
     WasmStack& stack
 ) {
     stack.clear();
+    std::unordered_map<std::string, WasmValue> locals;
     std::cout << "\033[1;36m[executor:execute]\033[0m Executing function '" 
               << func.name << "' (index " << func.index << ").\n";
 
@@ -182,6 +183,85 @@ void WasmExecutor::execute(
             std::cout << "\033[1;36m[executor:f64.load]\033[0m mem[" << addr.i32
                     << "] → " << value << "\n";
             stack.push(WasmValue(value));
+        } else if (op == "(local") {
+            std::string name, typeStr;
+            iss >> name >> typeStr;
+
+            // rimuovi eventuale parentesi finale ")"
+            if (!typeStr.empty() && typeStr.back() == ')')
+                typeStr.pop_back();
+
+            ValueType t;
+            if (typeStr == "i32") t = ValueType::I32;
+            else if (typeStr == "i64") t = ValueType::I64;
+            else if (typeStr == "f32") t = ValueType::F32;
+            else if (typeStr == "f64") t = ValueType::F64;
+            else {
+                std::cerr << "\033[1;31m[executor:local]\033[0m Unknown type '" << typeStr << "'\n";
+                continue;
+            }
+
+            locals[name] = {};
+            std::cout << "\033[1;36m[executor:local]\033[0m Declared local "
+                    << name << " of type " << typeStr << " (uninitialized)\n";
+        } else if (op == "local.set") {
+            std::string name;
+            iss >> name;
+            WasmValue value = stack.pop();
+
+            if (locals.find(name) == locals.end()) {
+                std::cerr << "\033[1;31m[executor:local.set]\033[0m Error: local " 
+                        << name << " not declared.\n";
+                continue;
+            }
+
+            locals[name] = value;
+            std::cout << "\033[1;36m[executor:local.set]\033[0m " 
+                    << name << " = ";
+
+            switch (value.type) {
+                case ValueType::I32: std::cout << value.i32; break;
+                case ValueType::I64: std::cout << value.i64; break;
+                case ValueType::F32: std::cout << value.f32; break;
+                case ValueType::F64: std::cout << value.f64; break;
+            }
+            std::cout << "\n";
+        } else if (op == "local.get") {
+            std::string name;
+            iss >> name;
+
+            if (locals.find(name) == locals.end()) {
+                std::cerr << "\033[1;31m[executor:local.get]\033[0m Error: local "
+                        << name << " not declared.\n";
+                stack.push(WasmValue(int32_t(0)));
+                continue;
+            }
+
+            WasmValue value = locals[name];
+            std::cout << "\033[1;36m[executor:local.get]\033[0m push " << name << " = ";
+            switch (value.type) {
+                case ValueType::I32: std::cout << value.i32; break;
+                case ValueType::I64: std::cout << value.i64; break;
+                case ValueType::F32: std::cout << value.f32; break;
+                case ValueType::F64: std::cout << value.f64; break;
+            }
+            std::cout << "\n";
+
+            stack.push(value);
+        } else if (op == "local.tee") {
+            std::string name;
+            iss >> name;
+
+            if (locals.find(name) == locals.end()) {
+                std::cerr << "\033[1;31m[executor:local.tee]\033[0m Error: local "
+                        << name << " not declared.\n";
+                continue;
+            }
+
+            WasmValue value = stack.top(); // non pop, tee lo lascia sullo stack
+            locals[name] = value;
+            std::cout << "\033[1;36m[executor:local.tee]\033[0m " 
+                    << name << " = (value remains on stack)\n";
         } else if (op == "i32.add") {
             WasmValue b = stack.pop();
             WasmValue a = stack.pop();

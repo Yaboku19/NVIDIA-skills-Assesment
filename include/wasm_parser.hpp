@@ -8,8 +8,8 @@
 
 class WasmParser {
 public:
-    void parseModule(WasmStack& stack, std::unordered_map<std::string, int32_t>& globals);
-    void parseGlobal(const std::string& line, std::unordered_map<std::string, int32_t>& globals);
+    void parseModule(WasmStack& stack, std::unordered_map<std::string, WasmGlobal>& globals);
+    void parseGlobal(const std::string& line, std::unordered_map<std::string, WasmGlobal>& globals);
     void parseType(const std::string& line, std::unordered_map<int, FuncType>& funcTypes);
     FuncDef parseFunction(const std::string& line, std::unordered_map<int, FuncDef>& functionsByID,
                        std::unordered_map<std::string, FuncDef>& functionByName,
@@ -19,6 +19,6 @@ public:
     void parseExport(const std::string& line, std::unordered_map<std::string, WasmExport>& exports);
     
     void print_exports(const std::unordered_map<std::string, WasmExport>& exports) const;
-    void print_globals(const std::unordered_map<std::string, int32_t>& globals) const;
+    void print_globals(const std::unordered_map<std::string, WasmGlobal>& globals) const;
     void print_functions(const std::unordered_map<std::string, FuncDef>& functionByName, const std::unordered_map<int, FuncDef>& functionsByID) const;
 };

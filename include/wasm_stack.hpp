@@ -14,6 +14,8 @@ public:
 
     WasmValue pop();
 
+    WasmValue top();
+
     void dump();
 
 private:

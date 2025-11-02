@@ -44,6 +44,10 @@ int main(int argc, char** argv) {
         interpreter.showMemory(0, 128);
         interpreter.callFunctionByExportName("_test_store_load_byte_signed");
         interpreter.showMemory(0, 128);
+        interpreter.callFunctionByExportName("_test_locals_arithmetic");
+        interpreter.showMemory(0, 128);
+        interpreter.callFunctionByExportName("_test_locals_tee");
+        interpreter.showMemory(0, 128);
     } catch (const std::exception& e) {
         std::cerr << "Error: " << e.what() << "\n";
         return 1;

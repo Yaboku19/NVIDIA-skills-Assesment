@@ -23,7 +23,7 @@ private:
     std::string functionName = "";
     int functionIndex = -1;
     int brakes = 0;
-    std::unordered_map<std::string, int32_t> globals;
+    std::unordered_map<std::string, WasmGlobal> globals;
 
     std::unordered_map<int, FuncType> funcTypes; // type index → signature
     std::unordered_map<int, FuncDef> functionsByID;

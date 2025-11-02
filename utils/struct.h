@@ -49,3 +49,10 @@ struct WasmValue {
     explicit WasmValue(float v)   : type(ValueType::F32), f32(v) {}
     explicit WasmValue(double v)  : type(ValueType::F64), f64(v) {}
 };
+
+struct WasmGlobal {
+    std::string name;
+    ValueType type;
+    bool mutableFlag;
+    WasmValue value;
+};

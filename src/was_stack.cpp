@@ -19,6 +19,14 @@ WasmValue WasmStack::pop() {
     return val;
 }
 
+WasmValue WasmStack::top() {
+    if (data.empty()) throw std::runtime_error("Stack underflow");
+    WasmValue val = data.back();
+    std::cout << "\033[1;33m[stack]\033[0m pop ";
+    printTop(val);
+    return val;
+}
+
 void WasmStack::dump() {
     std::cout << "\033[1;33m[stack dump]\033[0m ";
     for (auto& v : data)

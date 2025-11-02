@@ -11,7 +11,7 @@ public:
     void execute(const FuncDef& func,
     std::unordered_map<int, FuncDef>& functionsByID,
     WasmMemory& memory,
-    std::unordered_map<std::string, int32_t>& globals,
+    std::unordered_map<std::string, WasmGlobal>& globals,
     WasmStack& stack);
 private:
 };

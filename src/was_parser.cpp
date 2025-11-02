@@ -6,43 +6,110 @@
 #include <algorithm> 
 #include <regex>
 
-void WasmParser::parseModule(WasmStack& stack, std::unordered_map<std::string, int32_t>& globals) {
+void WasmParser::parseModule(WasmStack& stack, std::unordered_map<std::string, WasmGlobal>& globals) {
     stack.clear();
     globals.clear();
 
     std::cout << "\033[1;32m[parser:parseModule]\033[0m New module initialized. Stack and globals cleared.\n";
 }
 
-void WasmParser::parseGlobal(const std::string& line, std::unordered_map<std::string, int32_t>& globals) {
+void WasmParser::parseGlobal(const std::string& line, std::unordered_map<std::string, WasmGlobal>& globals) {
     std::cout << "\033[1;32m[parser:parseGlobal]\033[0m Global definition found: " << line << "\n";
 
     std::istringstream iss(line);
-    std::string temp, name, token;
-    int32_t value = 0;
+    std::string token, name, typeStr, mutStr;
+    bool isMutable = false;
+    ValueType type = ValueType::I32;
+    WasmValue initValue;
 
-    iss >> temp;
+    iss >> token;
     iss >> name;
+    iss >> mutStr;
 
-    while (iss >> token) {
-        if (token.find("i32.const") != std::string::npos) {
-            iss >> value;
-            break;
-        }
+    if (mutStr == "(mut") {
+        isMutable = true;
+        iss >> typeStr;
+        if (!typeStr.empty() && typeStr.back() == ')')
+            typeStr.pop_back();
+    } else {
+        typeStr = mutStr;
     }
 
-    globals[name] = value;
-    std::cout << "\033[1;32m[parser:parseGlobal]\033[0m Global init → " << name << " = " << value << "\n";
+    if (typeStr == "i32") type = ValueType::I32;
+    else if (typeStr == "i64") type = ValueType::I64;
+    else if (typeStr == "f32") type = ValueType::F32;
+    else if (typeStr == "f64") type = ValueType::F64;
+    else {
+        std::cerr << "\033[1;31m[parser:parseGlobal]\033[0m Unknown type " << typeStr << "\n";
+        return;
+    }
+
+    std::string constType;
+    iss >> constType;
+
+    if (constType.find("i32.const") != std::string::npos) {
+        int32_t val; iss >> val;
+        initValue = WasmValue(val);
+    } else if (constType.find("i64.const") != std::string::npos) {
+        int64_t val; iss >> val;
+        initValue = WasmValue(val);
+    } else if (constType.find("f32.const") != std::string::npos) {
+        float val; iss >> val;
+        initValue = WasmValue(val);
+    } else if (constType.find("f64.const") != std::string::npos) {
+        double val; iss >> val;
+        initValue = WasmValue(val);
+    } else {
+        std::cerr << "\033[1;31m[parser:parseGlobal]\033[0m Unknown init constant type: " << constType << "\n";
+        return;
+    }
+
+    WasmGlobal g{name, type, isMutable, initValue};
+    globals[name] = g;
+
+    std::cout << "\033[1;32m[parser:parseGlobal]\033[0m Global "
+              << name << " (type=" << typeStr
+              << ", mutable=" << (isMutable ? "true" : "false")
+              << ") = ";
+
+    switch (type) {
+        case ValueType::I32: std::cout << initValue.i32; break;
+        case ValueType::I64: std::cout << initValue.i64; break;
+        case ValueType::F32: std::cout << initValue.f32; break;
+        case ValueType::F64: std::cout << initValue.f64; break;
+    }
+    std::cout << "\n";
 }
 
-void WasmParser::print_globals(const std::unordered_map<std::string, int32_t>& globals) const {
+void WasmParser::print_globals(const std::unordered_map<std::string, WasmGlobal>& globals) const {
     std::cout << "\033[1;32m[parser:print_globals]\033[0m Global variables state:\n";
+
     if (globals.empty()) {
         std::cout << "  (empty)\n";
         return;
     }
 
-    for (const auto& [name, value] : globals) {
-        std::cout << "  " << name << " = " << value << "\n";
+    for (const auto& [name, g] : globals) {
+        std::cout << "  " << name << " (type=";
+
+        switch (g.type) {
+            case ValueType::I32: std::cout << "i32"; break;
+            case ValueType::I64: std::cout << "i64"; break;
+            case ValueType::F32: std::cout << "f32"; break;
+            case ValueType::F64: std::cout << "f64"; break;
+        }
+
+        std::cout << ", mutable=" << (g.mutableFlag ? "true" : "false")
+                  << ") = ";
+
+        switch (g.type) {
+            case ValueType::I32: std::cout << g.value.i32; break;
+            case ValueType::I64: std::cout << g.value.i64; break;
+            case ValueType::F32: std::cout << g.value.f32; break;
+            case ValueType::F64: std::cout << g.value.f64; break;
+        }
+
+        std::cout << "\n";
     }
 }
 
