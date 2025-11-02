@@ -13,7 +13,7 @@ int main(int argc, char** argv) {
         interpreter.loadFile(filename);
         interpreter.parse();
         interpreter.callFunctionByExportName("_start");
-        interpreter.showMemoryByID(0, 0, 128);
+        interpreter.showMemory(0, 128);
     } catch (const std::exception& e) {
         std::cerr << "Error: " << e.what() << "\n";
         return 1;

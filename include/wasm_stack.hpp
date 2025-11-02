@@ -1,13 +1,23 @@
 #pragma once
 #include <vector>
+#include <iostream>
+#include <stdexcept>
 #include <cstdint>
+#include <string>
+#include "struct.h"
 
 class WasmStack {
 public:
-    void push(int32_t value);
-    int32_t pop();
-    void dump() const;
     void clear();
+
+    void push(const WasmValue& val);
+
+    WasmValue pop();
+
+    void dump();
+
 private:
-    std::vector<int32_t> data;
+    std::vector<WasmValue> data;
+
+    static void printTop(const WasmValue& v, bool newline = true);
 };

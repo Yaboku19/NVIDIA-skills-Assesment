@@ -13,7 +13,7 @@ public:
     void loadFile(const std::string& path);
     void parse();
     void callFunctionByExportName(const std::string& exportName);
-    void showMemoryByID(int memoryID, uint32_t start, uint32_t count);
+    void showMemory(uint32_t start, uint32_t count);
 private:
     std::string sourceCode;
     WasmStack stack;
@@ -28,7 +28,7 @@ private:
     std::unordered_map<int, FuncType> funcTypes; // type index → signature
     std::unordered_map<int, FuncDef> functionsByID;
     std::unordered_map<std::string, FuncDef> functionByName;
-    std::unordered_map<int, WasmMemory> memoriesByIndex;
+    WasmMemory memory{1};
     std::unordered_map<std::string, WasmExport> exports;
 
     void executeLine(const std::string& line);

@@ -26,3 +26,26 @@ struct WasmExport {
     std::string kind;
     int index; 
 };
+
+enum class ValueType {
+    I32,
+    I64,
+    F32,
+    F64
+};
+
+struct WasmValue {
+    ValueType type;
+    union {
+        int32_t i32;
+        int64_t i64;
+        float f32;
+        double f64;
+    };
+
+    WasmValue() : type(ValueType::I32), i32(0) {}
+    explicit WasmValue(int32_t v) : type(ValueType::I32), i32(v) {}
+    explicit WasmValue(int64_t v) : type(ValueType::I64), i64(v) {}
+    explicit WasmValue(float v)   : type(ValueType::F32), f32(v) {}
+    explicit WasmValue(double v)  : type(ValueType::F64), f64(v) {}
+};
